@@ -1,0 +1,16 @@
+{
+  "name": "Sensor Layout Planner",
+  "short_name": "Sensor Layout",
+  "description": "Mark rooms on floor plans and lay out smoke and vape sensors. Works offline; data stays on the device.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#e8ebea",
+  "theme_color": "#e8ebea",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

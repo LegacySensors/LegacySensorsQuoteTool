@@ -1,0 +1,1280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Sensor Layout">
+<meta name="theme-color" content="#e8ebea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111517" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<title>Sensor Layout Planner</title>
+<style>
+/* Layout: one-screen drafting workspace. Tool rail | plan sheet on a mat | title-block inspector. */
+:root{
+  --bg:#e8ebea; --panel:#f7f8f6; --raise:#ffffff; --ink:#1b2124; --ink2:#59646a; --line:#cdd3d2; --mat:#d6dbda;
+  --accent:#c4321f; --accent-ink:#ffffff; --accent-soft:rgba(196,50,31,.10);
+  --sel:#1d63c9; --ok:#2d7a4b; --warn:#a05f00; --warn-soft:rgba(160,95,0,.12);
+  --f-label:"Avenir Next Condensed","Arial Narrow","Roboto Condensed",Arial,sans-serif;
+  --f-body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-num:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111517; --panel:#192023; --raise:#212a2e; --ink:#e5eaeb; --ink2:#97a3a9; --line:#2d373b; --mat:#0b0e0f;
+    --accent:#ff5d45; --accent-ink:#1c0703; --accent-soft:rgba(255,93,69,.15);
+    --sel:#6aa8ff; --ok:#5cc28a; --warn:#e3a33b; --warn-soft:rgba(227,163,59,.14); color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111517; --panel:#192023; --raise:#212a2e; --ink:#e5eaeb; --ink2:#97a3a9; --line:#2d373b; --mat:#0b0e0f;
+  --accent:#ff5d45; --accent-ink:#1c0703; --accent-soft:rgba(255,93,69,.15);
+  --sel:#6aa8ff; --ok:#5cc28a; --warn:#e3a33b; --warn-soft:rgba(227,163,59,.14); color-scheme:dark;
+}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);-webkit-text-size-adjust:100%}
+html,body{height:100%}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.4;overflow:hidden}
+*{box-sizing:border-box}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation}
+:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
+.k{font-family:var(--f-label);font-weight:600;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink2)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+
+.app{height:100%;display:flex;flex-direction:column;gap:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px 12px}
+.top{display:flex;align-items:center;gap:12px;min-width:0}
+.proj{display:flex;flex-direction:column;align-items:flex-start;gap:0;background:none;border:0;padding:4px 8px 4px 0;min-width:0;max-width:34%}
+.proj .v{font-family:var(--f-label);font-weight:700;font-size:21px;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.proj .v::after{content:" ▾";font-size:13px;color:var(--ink2)}
+.floors{display:flex;gap:6px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none;padding:2px}
+.floors::-webkit-scrollbar{display:none}
+.ftab{flex:none;display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 12px;font-family:var(--f-label);font-weight:600;font-size:15px;letter-spacing:.02em}
+.ftab .c{font-family:var(--f-num);font-size:12.5px;color:var(--ink2)}
+.ftab[aria-current="true"]{border-color:var(--ink);background:var(--raise);box-shadow:inset 0 -2px 0 var(--accent)}
+.ftab.add{color:var(--ink2);border-style:dashed}
+.top-r{display:flex;align-items:center;gap:12px;flex:none}
+.save{font-family:var(--f-label);font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);white-space:nowrap}
+.save[data-s="error"]{color:var(--accent)}
+.total{display:flex;flex-direction:column;align-items:flex-end;line-height:1}
+.total .n{font-family:var(--f-num);font-weight:500;font-size:28px;color:var(--accent)}
+.ibtn{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line);background:var(--panel);border-radius:10px}
+.ibtn svg{width:22px;height:22px}
+
+.banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);color:var(--ink);border-radius:10px;padding:8px 12px;font-size:14px}
+.banner b{font-family:var(--f-label);letter-spacing:.06em;text-transform:uppercase;font-size:13px;color:var(--warn)}
+
+.work{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:10px}
+.rail{display:flex;align-items:center;gap:4px;padding:4px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow-x:auto;scrollbar-width:none;flex:none}
+.rail::-webkit-scrollbar{display:none}
+.tool{flex:none;display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;border:1px solid transparent;background:none;border-radius:9px;color:var(--ink2);padding:6px 12px}
+.tool svg{width:22px;height:22px;flex:none}
+.tool span{font-family:var(--f-label);font-weight:600;font-size:13px;letter-spacing:.07em;text-transform:uppercase}
+.tool[aria-pressed="true"]{background:var(--raise);border-color:var(--line);color:var(--ink);box-shadow:inset 0 -3px 0 var(--accent)}
+.tool:disabled{opacity:.35;cursor:default}
+.rail .sep{flex:none;width:1px;align-self:stretch;background:var(--line);margin:6px 6px}
+.rail .grow{flex:1 0 8px}
+
+.stage{position:relative;min-width:0;min-height:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--mat);touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.hint{position:absolute;left:10px;top:10px;right:10px;pointer-events:none;display:flex}
+.hint span{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13.5px;color:var(--ink);max-width:100%;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.zoom{position:absolute;left:10px;bottom:10px;pointer-events:none;font-family:var(--f-num);font-size:12px;color:var(--ink2);background:color-mix(in srgb,var(--panel) 85%,transparent);border-radius:6px;padding:3px 7px}
+.busy{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--mat) 70%,transparent);font-family:var(--f-label);letter-spacing:.06em;text-transform:uppercase;font-size:14px}
+.empty{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--ink2)}
+
+.insp{min-width:0;min-height:0;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:14px}
+.insp h2{margin:0;font-family:var(--f-label);font-weight:700;font-size:20px;letter-spacing:.01em;text-wrap:balance}
+.insp p{margin:0;color:var(--ink2);font-size:14px}
+.sec{display:flex;flex-direction:column;gap:8px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field input[type=text],.field input[type=number],.field select,.sheet input[type=text],.sheet input[type=number],.sheet select{width:100%;min-width:0;border:1px solid var(--line);background:var(--raise);border-radius:8px;padding:9px 10px;font-size:16px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--raise);border-radius:999px;padding:6px 11px;font-size:14px}
+.chip i{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+.chip[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.tag{display:inline-block;font-family:var(--f-label);font-weight:600;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;border-radius:4px;padding:1px 6px;background:var(--accent-soft);color:var(--accent)}
+.tag.neutral{background:color-mix(in srgb,var(--ink2) 14%,transparent);color:var(--ink2)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.btn{border:1px solid var(--line);background:var(--raise);border-radius:9px;padding:10px 14px;font-weight:600;font-size:15px;text-align:center}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--accent)}
+.btn.danger.armed{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:default}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btns .btn{flex:1 1 auto}
+.stat{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:14.5px}
+.stat .num{font-size:15px}
+.big{font-family:var(--f-num);font-size:30px;line-height:1;color:var(--accent)}
+.note{font-size:13px;color:var(--ink2)}
+.warnbox{border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);background:var(--warn-soft);border-radius:8px;padding:8px 10px;font-size:13.5px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14.5px}
+.toggle input{width:22px;height:22px;accent-color:var(--accent)}
+
+/* title block: drawing-sheet convention */
+.tb{border:1.5px solid var(--ink);border-radius:2px;display:grid;grid-template-columns:1fr 1fr;font-size:14px}
+.tb>div{padding:6px 8px;border-right:1px solid var(--ink);border-bottom:1px solid var(--ink);display:flex;flex-direction:column;gap:2px;min-width:0}
+.tb>div:nth-child(2n){border-right:0}
+.tb>.w{grid-column:1/-1;border-right:0}
+.tb>div:nth-last-child(-n+2){border-bottom:0}
+.tb .v{font-weight:600;overflow-wrap:anywhere}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th{font-family:var(--f-label);font-weight:600;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);text-align:right;padding:4px 0 6px 10px;border-bottom:1px solid var(--line)}
+.tbl th:first-child,.tbl td:first-child{text-align:left;padding-left:0}
+.tbl td{padding:6px 0 6px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--f-num);font-size:13.5px}
+.tbl td:first-child{font-family:var(--f-body);font-size:14px}
+.tbl tr.tot td{border-bottom:0;font-weight:600}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;vertical-align:-1px}
+
+.sheet{position:fixed;inset:0;z-index:40;background:rgba(10,14,16,.42);display:grid;place-items:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet-card{width:min(560px,100%);max-height:100%;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.sheet-card h2{margin:0;font-family:var(--f-label);font-weight:700;font-size:22px}
+.sheet-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.plist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.pitem{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--raise)}
+.pitem:last-child{border-bottom:0}
+.pitem .grow{flex:1;min-width:0}
+.pitem .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pitem[aria-current="true"]{box-shadow:inset 3px 0 0 var(--accent)}
+.cls-row{display:grid;grid-template-columns:40px minmax(0,1fr) 130px 40px;gap:8px;align-items:center}
+.swatch{width:40px;height:40px;border-radius:8px;border:1px solid var(--line)}
+.preview{border:1px solid var(--line);border-radius:8px;background:#fff;max-height:220px;width:100%;object-fit:contain}
+.drop{border:1.5px dashed var(--line);border-radius:10px;padding:16px;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14.5px;max-width:min(520px,calc(100% - 32px));box-shadow:0 8px 24px rgba(0,0,0,.25)}
+
+.updbar{position:fixed;z-index:70;left:50%;transform:translateX(-50%);top:max(12px,env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 8px 8px 14px;box-shadow:0 10px 30px rgba(0,0,0,.2);max-width:calc(100% - 32px)}
+@media (max-width:1050px){ .work{grid-template-columns:minmax(0,1fr) 290px} .tool{flex-direction:column;gap:2px;padding:5px 6px;min-width:56px;min-height:52px} .tool span{font-size:11px} }
+@media (min-width:741px) and (max-width:1050px) and (orientation:portrait){
+  .work{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,36%)}
+}
+@media (max-width:740px){
+  body{overflow:auto}
+  .app{height:auto;min-height:100%}
+  .top{flex-wrap:wrap}
+  .proj{max-width:60%}
+  .floors{order:3;flex-basis:100%}
+  .work{grid-template-columns:minmax(0,1fr);grid-template-rows:62vh auto}
+  .tool{flex-direction:column;gap:2px;padding:5px 8px;min-width:58px}
+  .tool span{font-size:11px}
+  .rail .grow{display:none}
+  .insp{overflow:visible}
+  .cls-row{grid-template-columns:36px minmax(0,1fr) 108px 36px}
+}
+@media (prefers-reduced-motion:no-preference){ .toast{animation:tin .18s ease-out} @keyframes tin{from{opacity:0;transform:translate(-50%,6px)}} }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="top">
+    <button class="proj" id="projBtn" aria-label="Projects"><span class="k" id="projKind">Project</span><span class="v" id="projName">Loading…</span></button>
+    <nav class="floors" id="floors" aria-label="Floors"></nav>
+    <div class="top-r">
+      <span class="save" id="save" data-s=""></span>
+      <div class="total"><span class="k">Sensors</span><span class="n" id="total">0</span></div>
+    </div>
+  </header>
+  <div class="banner" id="banner" hidden><b>Example</b><span>A sample school wing for trying the tools. Changes here aren't saved.</span><button class="btn primary" id="startBtn" type="button">Start a real project</button></div>
+  <nav class="rail" id="rail" aria-label="Tools">
+    <button class="tool" data-tool="select" aria-pressed="true" title="Select (V)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 3.5l12.5 7.2-5.6 1.4-2.6 5.4z"/></svg><span>Select</span></button>
+    <button class="tool" data-tool="room" aria-pressed="false" title="Draw room (R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4.5" y="5.5" width="15" height="13"/><rect x="2.8" y="3.8" width="3.4" height="3.4" fill="currentColor"/><rect x="17.8" y="16.8" width="3.4" height="3.4" fill="currentColor"/></svg><span>Room</span></button>
+    <button class="tool" data-tool="detect" aria-pressed="false" title="Detect room (D)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 8V3h5M21 8V3h-5M3 16v5h5M21 16v5h-5"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/></svg><span>Detect</span></button>
+    <button class="tool" data-tool="sensor" aria-pressed="false" title="Place sensor (S)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M14.4 9.3c-.4-.9-1.3-1.4-2.4-1.4-1.4 0-2.4.8-2.4 1.9 0 2.6 4.9 1.5 4.9 4.3 0 1.2-1.1 2-2.5 2-1.2 0-2.2-.6-2.6-1.6" stroke-linecap="round"/></svg><span>Sensor</span></button>
+    <button class="tool" data-tool="scale" aria-pressed="false" title="Set scale (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M2.5 16.5L16.5 2.5l5 5-14 14z"/><path d="M6.5 12.5l2 2M9.5 9.5l2 2M12.5 6.5l2 2" stroke-linecap="round"/></svg><span>Scale</span></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="tool" id="fitBtn" title="Fit plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Fit</span></button>
+    <button class="tool" id="cellsBtn" aria-pressed="true" title="Show coverage grid"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16"/><path d="M4 12h16M12 4v16" stroke-dasharray="2 2"/></svg><span>Grid</span></button>
+    <button class="tool" id="undoBtn" title="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5L4 9l4 4"/><path d="M4 9h10a6 6 0 010 12h-4"/></svg><span>Undo</span></button>
+    <button class="tool" id="redoBtn" title="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5l4 4-4 4"/><path d="M20 9H10a6 6 0 000 12h4"/></svg><span>Redo</span></button>
+    <span class="grow" aria-hidden="true"></span>
+    <button class="tool" id="setBtn" title="Project settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>Settings</span></button>
+  </nav>
+  <main class="work">
+    <section class="stage" id="stage">
+      <canvas id="cv"></canvas>
+      <div class="hint" id="hint"><span id="hintText"></span></div>
+      <div class="zoom num" id="zoom"></div>
+      <div class="empty" id="empty" hidden></div>
+      <div class="busy" id="busy" hidden>Working…</div>
+    </section>
+    <aside class="insp" id="insp" aria-live="polite"></aside>
+  </main>
+</div>
+<div class="sheet" id="sheet" hidden><div class="sheet-card" id="sheetCard" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast" hidden></div>
+<div class="updbar" id="updbar" hidden><span>A new version of the planner is ready.</span><button class="btn primary" id="updBtn" type="button">Update now</button></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- small utilities ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const clone = o => JSON.parse(JSON.stringify(o));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const mid = (a, b) => ({x: (a.x + b.x) / 2, y: (a.y + b.y) / 2});
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem('slp:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('slp:' + k, JSON.stringify(v)); } catch {} }
+};
+function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+
+function fmtFt(ft) {
+  if (ft == null || !isFinite(ft)) return '—';
+  const tin = Math.round(ft * 12), f = Math.floor(tin / 12), i = tin - f * 12;
+  return `${f}′-${i}″`;
+}
+function parseFt(str) {
+  if (str == null) return null;
+  const s = String(str).trim().replace(/[’′]/g, "'").replace(/[”″]/g, '"');
+  if (!s) return null;
+  let m = s.match(/^(\d+(?:\.\d+)?)\s*(?:'|ft|feet)?$/i);
+  if (m) { const v = +m[1]; return v > 0 ? v : null; }
+  m = s.match(/^(\d+(?:\.\d+)?)\s*(?:"|in|inches)$/i);
+  if (m) { const v = +m[1] / 12; return v > 0 ? v : null; }
+  m = s.match(/^(\d+(?:\.\d+)?)\s*(?:'|ft|feet)?\s*[- ]?\s*(\d+(?:\.\d+)?)\s*(?:"|in|inches)?$/i);
+  if (m) { const v = +m[1] + (+m[2]) / 12; return v > 0 ? v : null; }
+  return null;
+}
+const fmtInt = n => Math.round(n).toLocaleString('en-US');
+
+/* ---------- domain defaults ---------- */
+const PALETTE = ['#d08a00','#0e8f9a','#2a6fd6','#7a5cc7','#3c8a3f','#c2477d','#8a6d3b','#7d878c','#4f6470','#b5562b','#1f8a6b','#5560c9'];
+const DEFAULT_CLASSES = [
+  {id:'classroom', name:'Classroom', mode:'general', color:'#d08a00'},
+  {id:'bathroom', name:'Bathroom', mode:'vape', color:'#0e8f9a'},
+  {id:'locker', name:'Locker room', mode:'vape', color:'#2a6fd6'},
+  {id:'hallway', name:'Hallway', mode:'general', color:'#7a5cc7'},
+  {id:'office', name:'Office', mode:'general', color:'#3c8a3f'},
+  {id:'large', name:'Gym / Cafeteria', mode:'general', color:'#c2477d'},
+  {id:'guest', name:'Guest room', mode:'vape', color:'#8a6d3b'},
+  {id:'none', name:'Stair / Mech', mode:'none', color:'#7d878c'},
+  {id:'other', name:'Other', mode:'general', color:'#4f6470'},
+];
+const MODE_LABEL = {general:'Cig / THC', vape:'Vape', none:'No sensors'};
+const SENSOR_RED = '#c4321f';
+const PLACEHOLDER = {cigCov:1000, vapeCov:500};
+
+function newProject(name, siteType) {
+  return {id: uid(), schema: 1, name: name || 'Untitled building', siteType: siteType || 'School',
+    settings: {cigCov: PLACEHOLDER.cigCov, vapeCov: PLACEHOLDER.vapeCov},
+    classes: clone(DEFAULT_CLASSES), createdAt: Date.now(), updatedAt: Date.now()};
+}
+
+/* ---------- storage adapters (same shape, so a shared backend can slot in) ---------- */
+class LocalStore {
+  constructor() { this.kind = 'local'; this.urls = new Map(); }
+  open() { return new Promise((res, rej) => {
+    const r = indexedDB.open('sensor-layout-planner', 1);
+    r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('projects', {keyPath: 'id'}); const f = d.createObjectStore('floors', {keyPath: 'key'}); f.createIndex('pid', 'pid'); d.createObjectStore('images'); };
+    r.onsuccess = () => { this.idb = r.result; res(this); }; r.onerror = () => rej(r.error);
+  }); }
+  tx(store, mode, fn) { return new Promise((res, rej) => {
+    const t = this.idb.transaction(store, mode), s = t.objectStore(store); let out; const r = fn(s);
+    if (r) r.onsuccess = () => { out = r.result; };
+    t.oncomplete = () => res(out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+  }); }
+  async listProjects() { return (await this.tx('projects', 'readonly', s => s.getAll())) || []; }
+  async getProject(id) { return (await this.tx('projects', 'readonly', s => s.get(id))) || null; }
+  async saveProject(p) { await this.tx('projects', 'readwrite', s => s.put(clone(p))); }
+  async listFloors(pid) { const rows = await this.tx('floors', 'readonly', s => s.index('pid').getAll(pid)); return (rows || []).map(r => r.data); }
+  async saveFloor(pid, f) { await this.tx('floors', 'readwrite', s => s.put({key: pid + '/' + f.id, pid, data: clone(f)})); }
+  async deleteFloor(pid, f) { await this.tx('floors', 'readwrite', s => s.delete(pid + '/' + f.id)); if (f.imageRef) await this.deleteImage(f.imageRef); }
+  async deleteProject(pid) { const fl = await this.listFloors(pid); for (const f of fl) await this.deleteFloor(pid, f); await this.tx('projects', 'readwrite', s => s.delete(pid)); }
+  async putImage(blob) { const id = uid(); await this.tx('images', 'readwrite', s => s.put(blob, id)); return id; }
+  async imageUrl(ref) { if (this.urls.has(ref)) return this.urls.get(ref); const b = await this.tx('images', 'readonly', s => s.get(ref)); if (!b) return null; const u = URL.createObjectURL(b); this.urls.set(ref, u); return u; }
+  async deleteImage(ref) { await this.tx('images', 'readwrite', s => s.delete(ref)); }
+  async getImageBlob(ref) { return (await this.tx('images', 'readonly', s => s.get(ref))) || null; }
+}
+class MemoryStore {
+  constructor() { this.kind = 'memory'; this.p = new Map(); this.f = new Map(); this.i = new Map(); this.b = new Map(); }
+  async listProjects() { return [...this.p.values()].map(clone); }
+  async getProject(id) { return this.p.has(id) ? clone(this.p.get(id)) : null; }
+  async saveProject(p) { this.p.set(p.id, clone(p)); }
+  async listFloors(pid) { return [...this.f.values()].filter(x => x.pid === pid).map(x => clone(x.data)); }
+  async saveFloor(pid, f) { this.f.set(pid + '/' + f.id, {pid, data: clone(f)}); }
+  async deleteFloor(pid, f) { this.f.delete(pid + '/' + f.id); }
+  async deleteProject(pid) { for (const k of [...this.f.keys()]) if (k.startsWith(pid + '/')) this.f.delete(k); this.p.delete(pid); }
+  async putImage(blob) { const id = uid(); this.i.set(id, URL.createObjectURL(blob)); this.b.set(id, blob); return id; }
+  async getImageBlob(ref) { return this.b.get(ref) || null; }
+  async imageUrl(ref) { return this.i.get(ref) || null; }
+  async deleteImage() {}
+}
+async function initStore() {
+  let st;
+  try { st = await new LocalStore().open(); } catch { st = new MemoryStore(); }
+  try { if (navigator.storage && navigator.storage.persist) S.persisted = await navigator.storage.persist(); } catch {}
+  return st;
+}
+
+/* ---------- state ---------- */
+const S = {
+  store: null, projects: [], P: null, floors: [], fid: null, demo: false,
+  tool: 'select', sel: null, view: {x: 0, y: 0, k: 1}, fitK: 1,
+  imgs: new Map(), ana: new Map(), hist: new Map(),
+  showCells: LS.get('cells', true), lastCls: null,
+  detect: LS.get('detect', {thr: 150, gap: 6}),
+  pendingScale: null, dirtyFloors: new Set(), dirtyProject: false, saveT: 0,
+  armed: null,
+};
+const curFloor = () => S.floors.find(f => f.id === S.fid) || null;
+
+/* ---------- geometry & counting ---------- */
+function clsOf(id) { const p = S.P; return p.classes.find(c => c.id === id) || p.classes.find(c => c.id === 'other') || p.classes[0]; }
+function spacing(mode) { const st = S.P.settings, cov = mode === 'vape' ? st.vapeCov : st.cigCov; return cov > 0 ? Math.sqrt(cov) : 0; }
+function dims(room, F) {
+  if (room.dim) return {l: room.dim.l, w: room.dim.w, src: 'entered'};
+  if (F.pxPerFt) return {l: room.w / F.pxPerFt, w: room.h / F.pxPerFt, src: 'scale'};
+  return null;
+}
+function grid(room, F) {
+  const c = clsOf(room.cls);
+  if (c.mode === 'none') return {nx: 0, ny: 0, count: 0, mode: 'none'};
+  const d = dims(room, F), s = spacing(c.mode);
+  if (!d || !s) return {nx: 0, ny: 0, count: 0, mode: c.mode, missing: !d};
+  const nx = Math.max(1, Math.ceil(d.l / s - 1e-9)), ny = Math.max(1, Math.ceil(d.w / s - 1e-9));
+  return {nx, ny, count: nx * ny, mode: c.mode, s};
+}
+function autoPts(room, g) {
+  const pts = [];
+  for (let j = 0; j < g.ny; j++) for (let i = 0; i < g.nx; i++) pts.push({x: room.x + (i + .5) * room.w / g.nx, y: room.y + (j + .5) * room.h / g.ny});
+  return pts;
+}
+function floorStats(F) {
+  const by = new Map(); let auto = 0, missing = 0, generalSqft = 0;
+  for (const c of S.P.classes) by.set(c.id, {rooms: 0, sqft: 0, sensors: 0});
+  for (const r of F.rooms) {
+    const c = clsOf(r.cls), b = by.get(c.id), d = dims(r, F), g = grid(r, F);
+    b.rooms++; if (d) b.sqft += d.l * d.w; else if (c.mode !== 'none') missing++;
+    const a = r.auto ? g.count : 0; auto += a; b.sensors += a;
+    if (d && c.mode === 'general') generalSqft += d.l * d.w;
+  }
+  let unassigned = 0;
+  for (const s of F.sensors) {
+    const r = s.roomId && F.rooms.find(x => x.id === s.roomId);
+    if (r) by.get(clsOf(r.cls).id).sensors++; else unassigned++;
+  }
+  const manual = F.sensors.length;
+  return {by, auto, manual, unassigned, total: auto + manual, missing, generalSqft};
+}
+const projectTotal = () => S.floors.reduce((n, F) => n + floorStats(F).total, 0);
+function roomAt(ip) {
+  const F = curFloor(); let best = null;
+  for (const r of F.rooms) if (ip.x >= r.x && ip.x <= r.x + r.w && ip.y >= r.y && ip.y <= r.y + r.h) if (!best || r.w * r.h < best.w * best.h) best = r;
+  return best;
+}
+
+/* ---------- undo ---------- */
+function histOf(fid) { if (!S.hist.has(fid)) S.hist.set(fid, {u: [], r: []}); return S.hist.get(fid); }
+const snap = F => JSON.stringify({rooms: F.rooms, sensors: F.sensors, pxPerFt: F.pxPerFt, scaleLine: F.scaleLine});
+function pushUndo() { const F = curFloor(); if (!F) return; const h = histOf(F.id); h.u.push(snap(F)); if (h.u.length > 80) h.u.shift(); h.r.length = 0; }
+function restore(F, s) { const o = JSON.parse(s); F.rooms = o.rooms; F.sensors = o.sensors; F.pxPerFt = o.pxPerFt; F.scaleLine = o.scaleLine; }
+function undo() { const F = curFloor(); if (!F) return; const h = histOf(F.id); if (!h.u.length) return; h.r.push(snap(F)); restore(F, h.u.pop()); validateSel(); changed(); }
+function redo() { const F = curFloor(); if (!F) return; const h = histOf(F.id); if (!h.r.length) return; h.u.push(snap(F)); restore(F, h.r.pop()); validateSel(); changed(); }
+function mutate(fn) { pushUndo(); fn(); changed(); }
+function validateSel() {
+  const F = curFloor(), s = S.sel; if (!s || !F) return;
+  if (s.type === 'room' && !F.rooms.some(r => r.id === s.id)) S.sel = null;
+  if (s.type === 'sensor' && !F.sensors.some(x => x.id === s.id)) S.sel = null;
+  if (s.type === 'auto') { const r = F.rooms.find(x => x.id === s.roomId); if (!r || !r.auto || s.idx >= grid(r, F).count) S.sel = null; }
+}
+
+/* ---------- saving ---------- */
+const queues = new Map();
+function queued(key, fn) { const prev = queues.get(key) || Promise.resolve(); const p = prev.then(fn); queues.set(key, p.catch(() => {})); return p; }
+function changed(opts = {}) {
+  const F = curFloor();
+  if (F && !opts.projectOnly) S.dirtyFloors.add(F.id);
+  S.dirtyProject = true;
+  scheduleSave(); renderHeader(); renderInspector(); req();
+}
+function scheduleSave() {
+  if (S.demo || !S.store) return;
+  clearTimeout(S.saveT); setSave('pending'); S.saveT = setTimeout(flushSave, 700);
+}
+async function flushSave() {
+  if (S.demo || !S.store || !S.P) return;
+  const jobs = [], st = S.store, pid = S.P.id;
+  if (S.dirtyProject) { S.dirtyProject = false; S.P.updatedAt = Date.now(); jobs.push(queued('p', () => st.saveProject(S.P))); }
+  for (const fid of S.dirtyFloors) { const F = S.floors.find(f => f.id === fid); if (F) jobs.push(queued('f' + fid, () => st.saveFloor(pid, F))); }
+  S.dirtyFloors.clear();
+  if (!jobs.length) return;
+  setSave('saving');
+  try { await Promise.all(jobs); setSave('saved'); }
+  catch (e) { setSave('error'); toast(e && e.name === 'QuotaExceededError' ? 'The iPad is out of space for this app. Back up and delete an old project to keep saving.' : 'Couldn’t save the last change. It will retry on your next edit.'); S.dirtyProject = true; }
+}
+function setSave(s) {
+  const el = $('#save'); el.dataset.s = s;
+  el.textContent = S.demo ? 'Not saved' : ({pending: 'Editing', saving: 'Saving…', saved: (S.store && S.store.kind === 'local') ? 'Saved on this iPad' : 'Not saved', error: 'Save failed', '': ''}[s] ?? '');
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(S.saveT); flushSave(); } });
+
+/* ---------- canvas ---------- */
+const stage = $('#stage'), cv = $('#cv'), ctx = cv.getContext('2d');
+let needDraw = false, T = {};
+function readTokens() { const cs = getComputedStyle(document.documentElement); T = {mat: cs.getPropertyValue('--mat').trim() || '#d6dbda', sel: cs.getPropertyValue('--sel').trim() || '#1d63c9'}; }
+function req() { if (!needDraw) { needDraw = true; requestAnimationFrame(draw); } }
+function resize() {
+  const dpr = window.devicePixelRatio || 1, w = stage.clientWidth, h = stage.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+}
+new ResizeObserver(() => { resize(); if (!S.sized || S.needFit) { S.sized = true; fit(); } req(); }).observe(stage);
+function fit() {
+  const F = curFloor(); if (!F) return; const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) { S.needFit = true; return; }
+  S.needFit = false;
+  const k = Math.min((w - 40) / F.imgW, (h - 40) / F.imgH); S.fitK = k;
+  S.view = {k, x: (w - F.imgW * k) / 2, y: (h - F.imgH * k) / 2}; req();
+}
+function draw() {
+  needDraw = false; resize();
+  const dpr = window.devicePixelRatio || 1, w = stage.clientWidth, h = stage.clientHeight;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = T.mat; ctx.fillRect(0, 0, w, h);
+  const F = curFloor(); $('#zoom').textContent = F ? Math.round(S.view.k / S.fitK * 100) + '%' : '';
+  if (!F) return;
+  const v = S.view; ctx.save(); ctx.translate(v.x, v.y); ctx.scale(v.k, v.k);
+  drawScene(ctx, F, 1 / v.k, {sel: S.sel, live: true});
+  ctx.restore();
+}
+function drawScene(c, F, px, o) {
+  c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 16 * px * (o.live ? 1 : 0); c.fillStyle = '#ffffff'; c.fillRect(0, 0, F.imgW, F.imgH); c.restore();
+  const img = S.imgs.get(F.id);
+  if (img) { c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(img, 0, 0, F.imgW, F.imgH); }
+  const selRoom = o.sel && o.sel.type === 'room' ? o.sel.id : (o.sel && o.sel.type === 'auto' ? o.sel.roomId : null);
+  // rooms
+  for (const r of F.rooms) {
+    const cl = clsOf(r.cls);
+    c.fillStyle = hexA(cl.color, r.id === selRoom ? .24 : .15); c.fillRect(r.x, r.y, r.w, r.h);
+    c.lineWidth = (r.id === selRoom ? 3 : 2) * px; c.strokeStyle = cl.color; c.setLineDash([]); c.strokeRect(r.x, r.y, r.w, r.h);
+    if (S.showCells && r.auto) {
+      const g = grid(r, F);
+      if (g.count > 1) {
+        c.save(); c.setLineDash([5 * px, 4 * px]); c.lineWidth = 1.2 * px; c.strokeStyle = hexA(cl.color, .75); c.beginPath();
+        for (let i = 1; i < g.nx; i++) { const x = r.x + i * r.w / g.nx; c.moveTo(x, r.y); c.lineTo(x, r.y + r.h); }
+        for (let j = 1; j < g.ny; j++) { const y = r.y + j * r.h / g.ny; c.moveTo(r.x, y); c.lineTo(r.x + r.w, y); }
+        c.stroke(); c.restore();
+      }
+    }
+  }
+  // labels
+  c.textAlign = 'left'; c.textBaseline = 'top';
+  for (const r of F.rooms) {
+    if (r.w / px < 70 || r.h / px < 38) continue;
+    const cl = clsOf(r.cls), d = dims(r, F), g = grid(r, F);
+    const l1 = r.name, l2 = d ? `${fmtFt(d.l)} × ${fmtFt(d.w)}` : 'No scale', l3 = cl.mode === 'none' ? 'No sensors' : (r.auto ? (g.count ? `${g.nx}×${g.ny} grid` : '') : 'Manual layout');
+    const x = r.x + 6 * px, y = r.y + 5 * px;
+    c.save(); c.beginPath(); c.rect(r.x, r.y, r.w, r.h); c.clip();
+    c.font = `700 ${13 * px}px "Avenir Next Condensed","Arial Narrow",Arial,sans-serif`;
+    halo(c, l1, x, y, px, '#15191b');
+    c.font = `500 ${11 * px}px ui-monospace,"SF Mono",Menlo,monospace`;
+    if (r.h / px > 52) halo(c, l2, x, y + 16 * px, px, d ? '#3a4448' : '#a05f00');
+    if (r.h / px > 66 && l3) halo(c, l3, x, y + 30 * px, px, cl.color);
+    c.restore();
+  }
+  // sensors
+  const selAuto = o.sel && o.sel.type === 'auto' ? o.sel : null, selMan = o.sel && o.sel.type === 'sensor' ? o.sel.id : null;
+  for (const r of F.rooms) {
+    if (!r.auto) continue; const g = grid(r, F); if (!g.count) continue;
+    autoPts(r, g).forEach((p, i) => sensorGlyph(c, p.x, p.y, g.mode === 'vape' ? 'V' : 'S', false, selAuto && selAuto.roomId === r.id && selAuto.idx === i, px));
+  }
+  for (const s of F.sensors) sensorGlyph(c, s.x, s.y, s.detached ? 'M' : 'P', true, s.id === selMan, px);
+  if (!o.live) return;
+  // selection handles
+  if (o.sel && o.sel.type === 'room') {
+    const r = F.rooms.find(x => x.id === o.sel.id);
+    if (r) for (const [hx, hy] of [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]]) {
+      const s = 7 * px; c.fillStyle = '#fff'; c.strokeStyle = T.sel; c.lineWidth = 2 * px; c.setLineDash([]);
+      c.fillRect(hx - s, hy - s, 2 * s, 2 * s); c.strokeRect(hx - s, hy - s, 2 * s, 2 * s);
+    }
+  }
+  // drafts
+  if (G && G.type === 'draw' && G.moved) {
+    const r = norm(G.a, G.b); c.setLineDash([6 * px, 4 * px]); c.lineWidth = 2 * px; c.strokeStyle = T.sel; c.fillStyle = hexA('#1d63c9', .08);
+    c.fillRect(r.x, r.y, r.w, r.h); c.strokeRect(r.x, r.y, r.w, r.h); c.setLineDash([]);
+    if (F.pxPerFt) { c.font = `600 ${12 * px}px ui-monospace,"SF Mono",Menlo,monospace`; halo(c, `${fmtFt(r.w / F.pxPerFt)} × ${fmtFt(r.h / F.pxPerFt)}`, r.x + 4 * px, r.y + r.h + 4 * px, px, '#1d63c9'); }
+  }
+  const line = (G && G.type === 'scale' && G.moved) ? {a: G.a, b: G.b} : (S.pendingScale || (S.tool === 'scale' && F.scaleLine ? F.scaleLine : null));
+  if (line) {
+    c.strokeStyle = SENSOR_RED; c.lineWidth = 2.5 * px; c.setLineDash([]); c.beginPath(); c.moveTo(line.a.x, line.a.y); c.lineTo(line.b.x, line.b.y); c.stroke();
+    const ang = Math.atan2(line.b.y - line.a.y, line.b.x - line.a.x) + Math.PI / 2, t = 9 * px;
+    for (const p of [line.a, line.b]) { c.beginPath(); c.moveTo(p.x - Math.cos(ang) * t, p.y - Math.sin(ang) * t); c.lineTo(p.x + Math.cos(ang) * t, p.y + Math.sin(ang) * t); c.stroke(); }
+    const m = mid(line.a, line.b); c.font = `600 ${12 * px}px ui-monospace,"SF Mono",Menlo,monospace`;
+    halo(c, line.ft ? fmtFt(line.ft) : (F.pxPerFt ? fmtFt(dist(line.a, line.b) / F.pxPerFt) : Math.round(dist(line.a, line.b)) + ' px'), m.x + 6 * px, m.y + 6 * px, px, SENSOR_RED);
+  }
+}
+function halo(c, text, x, y, px, color) { c.lineJoin = 'round'; c.lineWidth = 3.5 * px; c.strokeStyle = 'rgba(255,255,255,.92)'; c.strokeText(text, x, y); c.fillStyle = color; c.fillText(text, x, y); }
+function sensorGlyph(c, x, y, letter, filled, selected, px) {
+  const r = 11 * px;
+  if (selected) { c.beginPath(); c.arc(x, y, r + 5 * px, 0, Math.PI * 2); c.fillStyle = hexA('#1d63c9', .22); c.fill(); }
+  c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fillStyle = filled ? SENSOR_RED : '#ffffff'; c.fill();
+  c.lineWidth = 2.2 * px; c.strokeStyle = selected ? '#1d63c9' : SENSOR_RED; c.setLineDash([]); c.stroke();
+  c.fillStyle = filled ? '#ffffff' : SENSOR_RED; c.font = `700 ${12.5 * px}px "Avenir Next Condensed","Arial Narrow",Arial,sans-serif`;
+  c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(letter, x, y + .5 * px); c.textAlign = 'left'; c.textBaseline = 'top';
+}
+const norm = (a, b) => ({x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y)});
+
+/* ---------- hit testing ---------- */
+const toImg = p => ({x: (p.x - S.view.x) / S.view.k, y: (p.y - S.view.y) / S.view.k});
+function hitSensor(ip) {
+  const F = curFloor(), tol = 16 / S.view.k; let best = null, bd = tol;
+  for (const s of F.sensors) { const d = dist(s, ip); if (d < bd) { bd = d; best = {kind: 'manual', s}; } }
+  if (best) return best;
+  for (const r of F.rooms) { if (!r.auto) continue; const g = grid(r, F); if (!g.count) continue;
+    autoPts(r, g).forEach((p, i) => { const d = dist(p, ip); if (d < bd) { bd = d; best = {kind: 'auto', room: r, idx: i, p}; } }); }
+  return best;
+}
+function hitHandle(ip) {
+  if (!S.sel || S.sel.type !== 'room') return null; const r = curFloor().rooms.find(x => x.id === S.sel.id); if (!r) return null;
+  const tol = 20 / S.view.k, cs = {nw: [r.x, r.y], ne: [r.x + r.w, r.y], sw: [r.x, r.y + r.h], se: [r.x + r.w, r.y + r.h]};
+  for (const k in cs) if (Math.abs(ip.x - cs[k][0]) < tol && Math.abs(ip.y - cs[k][1]) < tol) return {corner: k, room: r};
+  return null;
+}
+
+/* ---------- gestures ---------- */
+const ptrs = new Map(); let G = null;
+const posOf = e => { const r = cv.getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
+cv.addEventListener('pointerdown', e => {
+  if (!curFloor()) return;
+  try { cv.setPointerCapture(e.pointerId); } catch {}
+  const p = posOf(e); ptrs.set(e.pointerId, p);
+  if (ptrs.size === 2) { abortGesture(); const [a, b] = [...ptrs.values()]; G = {type: 'pinch', d0: Math.max(10, dist(a, b)), m0: mid(a, b), v0: {...S.view}}; return; }
+  if (ptrs.size > 2) return;
+  startGesture(p);
+});
+cv.addEventListener('pointermove', e => {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId, posOf(e)); if (!G) return;
+  if (G.type === 'pinch') {
+    if (ptrs.size < 2) return; const [a, b] = [...ptrs.values()], m = mid(a, b);
+    const k = clamp(G.v0.k * dist(a, b) / G.d0, S.fitK * .4, S.fitK * 14);
+    const ix = (G.m0.x - G.v0.x) / G.v0.k, iy = (G.m0.y - G.v0.y) / G.v0.k;
+    S.view = {k, x: m.x - ix * k, y: m.y - iy * k}; req(); return;
+  }
+  if (G.type === 'dead') return;
+  moveGesture(posOf(e));
+});
+function pointerEnd(e) {
+  if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId);
+  if (G && (G.type === 'pinch' || G.type === 'dead')) { G = ptrs.size ? {type: 'dead'} : null; return; }
+  endGesture(e.type === 'pointercancel');
+}
+cv.addEventListener('pointerup', pointerEnd); cv.addEventListener('pointercancel', pointerEnd);
+cv.addEventListener('wheel', e => {
+  if (!curFloor()) return; e.preventDefault();
+  const p = posOf(e), f = Math.exp(-e.deltaY * (e.ctrlKey ? .012 : .0016)), v = S.view;
+  const k = clamp(v.k * f, S.fitK * .4, S.fitK * 14), ix = (p.x - v.x) / v.k, iy = (p.y - v.y) / v.k;
+  S.view = {k, x: p.x - ix * k, y: p.y - iy * k}; req();
+}, {passive: false});
+
+function startGesture(p) {
+  const ip = toImg(p), tool = S.tool;
+  const base = {start: p, ip, moved: false, pushed: false};
+  if (tool === 'select' || tool === 'room') { const h = hitHandle(ip); if (h) { G = {...base, type: 'resize', ...h, orig: {x: h.room.x, y: h.room.y, w: h.room.w, h: h.room.h}}; return; } }
+  if (tool === 'select' || tool === 'sensor') { const hs = hitSensor(ip); if (hs) { G = {...base, type: 'sensor', hit: hs}; return; } }
+  if (tool === 'select') { const r = roomAt(ip); if (r) { G = {...base, type: 'room', room: r, last: ip}; return; } G = {...base, type: 'pan', v0: {...S.view}}; return; }
+  if (tool === 'room') { G = {...base, type: 'draw', a: ip, b: ip}; return; }
+  if (tool === 'scale') { G = {...base, type: 'scale', a: ip, b: ip}; return; }
+  G = {...base, type: 'panOrTap', v0: {...S.view}};
+}
+function moveGesture(p) {
+  if (!G.moved && dist(p, G.start) < 7) return;
+  G.moved = true; const ip = toImg(p), F = curFloor();
+  switch (G.type) {
+    case 'pan': case 'panOrTap': S.view = {...S.view, x: G.v0.x + p.x - G.start.x, y: G.v0.y + p.y - G.start.y}; break;
+    case 'draw': case 'scale': G.b = ip; break;
+    case 'room': {
+      if (!G.pushed) { pushUndo(); G.pushed = true; S.sel = {type: 'room', id: G.room.id}; renderInspector(); }
+      const dx = ip.x - G.last.x, dy = ip.y - G.last.y; G.last = ip; G.room.x += dx; G.room.y += dy;
+      for (const s of F.sensors) if (s.roomId === G.room.id) { s.x += dx; s.y += dy; }
+      break;
+    }
+    case 'resize': {
+      if (!G.pushed) { pushUndo(); G.pushed = true; }
+      const o = G.orig; let x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
+      if (G.corner.includes('w')) x1 = ip.x; if (G.corner.includes('e')) x2 = ip.x;
+      if (G.corner.includes('n')) y1 = ip.y; if (G.corner.includes('s')) y2 = ip.y;
+      Object.assign(G.room, {x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.max(2, Math.abs(x2 - x1)), h: Math.max(2, Math.abs(y2 - y1))});
+      renderInspectorSoon(); break;
+    }
+    case 'sensor': {
+      if (!G.pushed) {
+        pushUndo(); G.pushed = true;
+        if (G.hit.kind === 'auto') { const s = detachRoom(G.hit.room, G.hit.idx); G.hit = {kind: 'manual', s}; toast('Room switched to hand-placed layout. Reset it from the room panel.'); }
+        S.sel = {type: 'sensor', id: G.hit.s.id}; renderInspector();
+      }
+      G.hit.s.x = ip.x; G.hit.s.y = ip.y; break;
+    }
+  }
+  req();
+}
+function endGesture(cancelled) {
+  const g = G; G = null; if (!g) return;
+  if (cancelled) { if (g.pushed) changed(); req(); return; }
+  const tap = !g.moved;
+  switch (g.type) {
+    case 'pan': if (tap) select(null); break;
+    case 'panOrTap': if (tap) { if (S.tool === 'detect') runDetect(g.ip); else if (S.tool === 'sensor') addSensor(g.ip); } break;
+    case 'room': if (tap) select({type: 'room', id: g.room.id}); else changed(); break;
+    case 'resize': if (g.pushed) changed(); break;
+    case 'sensor':
+      if (tap) select(g.hit.kind === 'auto' ? {type: 'auto', roomId: g.hit.room.id, idx: g.hit.idx} : {type: 'sensor', id: g.hit.s.id});
+      else { const s = g.hit.s; if (!s.detached) { const r = roomAt(s); s.roomId = r ? r.id : null; } changed(); }
+      break;
+    case 'draw':
+      if (tap) { const r = roomAt(g.ip); select(r ? {type: 'room', id: r.id} : null); }
+      else { const r = norm(g.a, g.b); if (r.w * S.view.k > 14 && r.h * S.view.k > 14) addRoom(r); }
+      break;
+    case 'scale':
+      if (!tap && dist(g.a, g.b) * S.view.k > 24) { S.pendingScale = {a: g.a, b: g.b}; S.sel = null; renderInspector(); setTimeout(() => { const i = $('#scaleLen'); if (i) i.focus(); }, 30); }
+      break;
+  }
+  req();
+}
+function abortGesture() { if (G && G.pushed) changed(); G = null; req(); }
+
+/* ---------- edits ---------- */
+function nextName(cid) {
+  const c = clsOf(cid), F = curFloor(), re = new RegExp('^' + c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' (\\d+)$');
+  let n = 0; for (const r of F.rooms) { const m = r.name.match(re); if (m) n = Math.max(n, +m[1]); }
+  return `${c.name} ${n + 1}`;
+}
+function addRoom(rect, clsId) {
+  const F = curFloor(), cid = clsId || (S.lastCls && S.P.classes.some(c => c.id === S.lastCls) ? S.lastCls : S.P.classes[0].id);
+  pushUndo();
+  const r = {id: uid(), name: nextName(cid), autoName: true, cls: cid, x: rect.x, y: rect.y, w: rect.w, h: rect.h, dim: null, auto: true};
+  F.rooms.push(r); S.sel = {type: 'room', id: r.id}; changed(); return r;
+}
+function addSensor(ip) {
+  const F = curFloor(); pushUndo(); const r = roomAt(ip);
+  const s = {id: uid(), x: ip.x, y: ip.y, roomId: r ? r.id : null, note: '', detached: false};
+  F.sensors.push(s); S.sel = {type: 'sensor', id: s.id}; changed();
+}
+function detachRoom(room, idx) {
+  const F = curFloor(), g = grid(room, F);
+  const made = autoPts(room, g).map(p => ({id: uid(), x: p.x, y: p.y, roomId: room.id, note: '', detached: true}));
+  F.sensors.push(...made); room.auto = false; return made[idx] || made[0];
+}
+function select(sel) { S.sel = sel; S.armed = null; if (sel) S.pendingScale = null; renderInspector(); req(); }
+function deleteSelection() {
+  const F = curFloor(), s = S.sel; if (!F || !s) return;
+  if (s.type === 'room') mutate(() => { F.rooms = F.rooms.filter(r => r.id !== s.id); F.sensors = F.sensors.filter(x => x.roomId !== s.id || !x.detached); for (const x of F.sensors) if (x.roomId === s.id) x.roomId = null; S.sel = null; });
+  else if (s.type === 'sensor') mutate(() => { F.sensors = F.sensors.filter(x => x.id !== s.id); S.sel = null; });
+}
+
+/* ---------- room detection (flood fill between walls) ---------- */
+function analysisFor(F) {
+  let A = S.ana.get(F.id); if (A) return A;
+  const img = S.imgs.get(F.id); if (!img) return null;
+  const a = Math.min(1, 1600 / Math.max(F.imgW, F.imgH)), w = Math.round(F.imgW * a), h = Math.round(F.imgH * a);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d', {willReadFrequently: true}); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(img, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data, lum = new Uint8Array(w * h);
+  for (let i = 0, j = 0; i < lum.length; i++, j += 4) lum[i] = (d[j] * 299 + d[j + 1] * 587 + d[j + 2] * 114) / 1000;
+  A = {a, w, h, lum, cache: new Map()}; S.ana.set(F.id, A); return A;
+}
+function wallMask(A, thr, r) {
+  const key = thr + ':' + r; if (A.cache.has(key)) return A.cache.get(key);
+  const {w, h, lum} = A, m = new Uint8Array(w * h);
+  for (let i = 0; i < m.length; i++) m[i] = lum[i] < thr ? 1 : 0;
+  let out = m;
+  if (r > 0) {
+    const t = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) { const row = y * w; let cnt = 0; for (let x = 0; x < Math.min(r, w); x++) cnt += m[row + x];
+      for (let x = 0; x < w; x++) { if (x + r < w) cnt += m[row + x + r]; if (x - r - 1 >= 0) cnt -= m[row + x - r - 1]; t[row + x] = cnt > 0 ? 1 : 0; } }
+    out = new Uint8Array(w * h);
+    for (let x = 0; x < w; x++) { let cnt = 0; for (let y = 0; y < Math.min(r, h); y++) cnt += t[y * w + x];
+      for (let y = 0; y < h; y++) { if (y + r < h) cnt += t[(y + r) * w + x]; if (y - r - 1 >= 0) cnt -= t[(y - r - 1) * w + x]; out[y * w + x] = cnt > 0 ? 1 : 0; } }
+  }
+  if (A.cache.size > 6) A.cache.clear(); A.cache.set(key, out); return out;
+}
+function floodRect(A, m, sx, sy) {
+  const {w, h} = A; sx = clamp(Math.round(sx), 0, w - 1); sy = clamp(Math.round(sy), 0, h - 1);
+  if (m[sy * w + sx]) { let found = false;
+    for (let rad = 1; rad <= 14 && !found; rad++) for (let dy = -rad; dy <= rad && !found; dy++) for (let dx = -rad; dx <= rad; dx++) {
+      const x = sx + dx, y = sy + dy; if (x >= 0 && y >= 0 && x < w && y < h && !m[y * w + x]) { sx = x; sy = y; found = true; break; } }
+    if (!found) return {err: 'wall'}; }
+  const N = w * h, seen = new Uint8Array(N), stack = new Int32Array(N), limit = N * .3;
+  let sp = 0, count = 0, minx = sx, maxx = sx, miny = sy, maxy = sy; const s0 = sy * w + sx; seen[s0] = 1; stack[sp++] = s0;
+  while (sp) {
+    const i = stack[--sp], x = i % w, y = (i - x) / w; count++;
+    if (count > limit || x === 0 || y === 0 || x === w - 1 || y === h - 1) return {err: 'leak'};
+    if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y;
+    let j = i - 1; if (!seen[j] && !m[j]) { seen[j] = 1; stack[sp++] = j; }
+    j = i + 1; if (!seen[j] && !m[j]) { seen[j] = 1; stack[sp++] = j; }
+    j = i - w; if (!seen[j] && !m[j]) { seen[j] = 1; stack[sp++] = j; }
+    j = i + w; if (!seen[j] && !m[j]) { seen[j] = 1; stack[sp++] = j; }
+  }
+  if (count < 60) return {err: 'small'};
+  return {minx, maxx, miny, maxy, count};
+}
+function runDetect(ip) {
+  const F = curFloor(), A = analysisFor(F); if (!A) { toast('The plan image is still loading.'); return; }
+  const {thr, gap} = S.detect, m = wallMask(A, thr, gap), res = floodRect(A, m, ip.x * A.a, ip.y * A.a);
+  if (res.err === 'wall') return toast('That spot is on a wall. Tap inside the open floor of a room.');
+  if (res.err === 'leak') return toast('No closed walls around that spot. Raise Gap seal, or draw this room with the Room tool.');
+  if (res.err === 'small') return toast('That area is too small to be a room. Lower Gap seal or tap a clearer spot.');
+  const g = gap, rect = {x: (res.minx - g) / A.a, y: (res.miny - g) / A.a, w: (res.maxx - res.minx + 1 + 2 * g) / A.a, h: (res.maxy - res.miny + 1 + 2 * g) / A.a};
+  rect.x = Math.max(0, rect.x); rect.y = Math.max(0, rect.y); rect.w = Math.min(F.imgW - rect.x, rect.w); rect.h = Math.min(F.imgH - rect.y, rect.h);
+  const dup = F.rooms.find(r => iou(r, rect) > .8);
+  if (dup) { select({type: 'room', id: dup.id}); return toast('That room is already marked.'); }
+  addRoom(rect); toast('Room outlined. Check the edges, then pick its class.');
+}
+function iou(a, b) { const x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y), x2 = Math.min(a.x + a.w, b.x + b.w), y2 = Math.min(a.y + a.h, b.y + b.h); const i = Math.max(0, x2 - x1) * Math.max(0, y2 - y1); return i / (a.w * a.h + b.w * b.h - i); }
+
+/* ---------- header ---------- */
+function renderHeader() {
+  const p = S.P; if (!p) return;
+  $('#projName').textContent = p.name; $('#projKind').textContent = p.siteType || 'Project';
+  $('#banner').hidden = !S.demo;
+  $('#total').textContent = fmtInt(projectTotal());
+  const nav = $('#floors');
+  nav.innerHTML = S.floors.map(F => `<button class="ftab" data-floor="${esc(F.id)}" aria-current="${F.id === S.fid}">${esc(F.name)} <span class="c">${floorStats(F).total}</span></button>`).join('') +
+    `<button class="ftab add" data-act="addFloor">+ Floor</button>`;
+  const F = curFloor(), h = F ? histOf(F.id) : {u: [], r: []};
+  $('#undoBtn').disabled = !h.u.length; $('#redoBtn').disabled = !h.r.length;
+  $('#cellsBtn').setAttribute('aria-pressed', S.showCells);
+  if (S.demo) setSave('');
+}
+$('#floors').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.act === 'addFloor') return S.demo ? toast('Start a real project first, then add its floors.') : openAddFloor();
+  if (b.dataset.floor === S.fid) return openFloorSheet();
+  setFloor(b.dataset.floor);
+});
+
+/* ---------- inspector ---------- */
+const insp = $('#insp');
+let inspT = 0; function renderInspectorSoon() { clearTimeout(inspT); inspT = setTimeout(renderInspector, 60); }
+const HINTS = {
+  select: 'Tap a room or sensor to edit it. Drag empty space to pan; pinch to zoom.',
+  room: 'Drag across the plan to draw a room. New rooms take the last class you picked.',
+  detect: 'Tap inside a room. The outline follows the walls around that spot.',
+  sensor: 'Tap to drop a priority sensor. Drag any sensor to move it.',
+  scale: 'Drag along a wall or dimension you know, then enter its real length.',
+};
+function setTool(t) {
+  S.tool = t; S.pendingScale = t === 'scale' ? S.pendingScale : null;
+  document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t));
+  $('#hintText').textContent = HINTS[t]; renderInspector(); req();
+}
+function renderInspector() {
+  const F = curFloor();
+  if (!S.P) { insp.innerHTML = '<p>Loading…</p>'; return; }
+  if (!F) { insp.innerHTML = `<h2>No floors yet</h2><p>Add a floor plan or evacuation map to start marking rooms.</p><button class="btn primary" data-act="addFloor">Add a floor plan</button>`; return; }
+  if (S.pendingScale) return void (insp.innerHTML = scaleForm(F));
+  const s = S.sel;
+  if (s && s.type === 'room') { const r = F.rooms.find(x => x.id === s.id); if (r) return void (insp.innerHTML = roomPanel(F, r)); }
+  if (s && s.type === 'sensor') { const x = F.sensors.find(y => y.id === s.id); if (x) return void (insp.innerHTML = sensorPanel(F, x)); }
+  if (s && s.type === 'auto') { const r = F.rooms.find(x => x.id === s.roomId); if (r) return void (insp.innerHTML = autoPanel(F, r, s.idx)); }
+  insp.innerHTML = (S.tool === 'detect' ? detectPanel() : '') + summaryPanel(F);
+}
+function scaleForm(F) {
+  const len = dist(S.pendingScale.a, S.pendingScale.b);
+  return `<div class="sec"><span class="k">Set scale</span><h2>How long is that line?</h2>
+    <p>Enter the real length of the line you drew. Every room on ${esc(F.name)} uses this scale.</p></div>
+    <div class="field"><label class="k" for="scaleLen">Real length (ft-in)</label><input type="text" id="scaleLen" inputmode="decimal" placeholder="e.g. 30' or 12'6&quot;" autocomplete="off"></div>
+    <p class="note">Line is ${fmtInt(len)} px on the plan. Formats: 30, 30', 12'6", 12 6.</p>
+    <div class="btns"><button class="btn" data-act="cancelScale">Cancel</button><button class="btn primary" data-act="setScale">Set scale</button></div>`;
+}
+function roomPanel(F, r) {
+  const c = clsOf(r.cls), d = dims(r, F), g = grid(r, F), s = c.mode === 'none' ? 0 : spacing(c.mode);
+  const man = F.sensors.filter(x => x.roomId === r.id), detached = man.filter(x => x.detached).length, prio = man.length - detached;
+  const sqft = d ? d.l * d.w : null;
+  const chips = S.P.classes.map(k => `<button class="chip" data-act="cls" data-id="${esc(k.id)}" aria-pressed="${k.id === r.cls}"><i style="background:${k.color}"></i>${esc(k.name)}</button>`).join('');
+  let layout;
+  if (c.mode === 'none') layout = `<p>This class gets no sensors.</p>`;
+  else if (!d) layout = `<div class="warnbox">No dimensions yet. Set the floor scale with the Scale tool, or type this room’s length and width above.</div>`;
+  else if (r.auto) layout = `<div class="stat"><span>${g.nx} × ${g.ny} grid at ${s.toFixed(1)} ft spacing</span><span class="big">${g.count}</span></div>
+      <p class="note">ROUNDUP(${d.l.toFixed(1)} ÷ ${s.toFixed(1)}) × ROUNDUP(${d.w.toFixed(1)} ÷ ${s.toFixed(1)}) = ${g.nx} × ${g.ny}</p>`;
+  else layout = `<div class="stat"><span>Manual layout</span><span class="big">${detached}</span></div><p class="note">Auto grid would place ${g.count}. Drag sensors on the plan to adjust.</p><button class="btn" data-act="resetAuto">Reset to auto layout</button>`;
+  const armed = S.armed === 'room:' + r.id;
+  return `<div class="sec"><span class="k">Room</span>
+      <div class="field"><input type="text" id="roomName" data-f="name" value="${esc(r.name)}" aria-label="Room name" autocomplete="off"></div></div>
+    <div class="sec"><span class="k">Class · ${esc(MODE_LABEL[c.mode])} detection</span><div class="chips">${chips}</div></div>
+    <div class="sec"><span class="k">Dimensions ${d ? `<span class="tag ${d.src === 'scale' ? 'neutral' : ''}">${d.src === 'scale' ? 'From scale' : 'Entered'}</span>` : ''}</span>
+      <div class="row2"><div class="field"><label class="k" for="dimL">Length ↔</label><input type="text" id="dimL" data-f="dimL" inputmode="decimal" value="${d ? fmtFt(d.l) : ''}" placeholder="ft-in" autocomplete="off"></div>
+      <div class="field"><label class="k" for="dimW">Width ↕</label><input type="text" id="dimW" data-f="dimW" inputmode="decimal" value="${d ? fmtFt(d.w) : ''}" placeholder="ft-in" autocomplete="off"></div></div>
+      ${sqft != null ? `<div class="stat"><span>Area</span><span class="num">${fmtInt(sqft)} sq ft</span></div>` : ''}
+      ${r.dim ? `<div class="btns">${F.pxPerFt ? '<button class="btn" data-act="clearDim">Use scale instead</button>' : ''}<button class="btn" data-act="scaleFromRoom">Set floor scale from this room</button></div>` : ''}</div>
+    <div class="sec"><span class="k">Sensors</span>${layout}
+      ${prio ? `<div class="stat"><span>Priority sensors in this room</span><span class="num">+${prio}</span></div>` : ''}</div>
+    <button class="btn danger ${armed ? 'armed' : ''}" data-act="delRoom">${armed ? 'Tap again to delete' : 'Delete room'}</button>`;
+}
+function sensorPanel(F, s) {
+  const r = s.roomId && F.rooms.find(x => x.id === s.roomId), armed = S.armed === 'sensor:' + s.id;
+  return `<div class="sec"><span class="k">${s.detached ? 'Manual layout sensor' : 'Priority sensor'}</span><h2>${r ? esc(r.name) : 'Not in a marked room'}</h2>
+      <p>${s.detached ? 'Part of this room’s hand-placed layout.' : 'Added by hand on top of the auto layout, for a high-risk spot.'}</p></div>
+    <div class="field"><label class="k" for="sNote">Note</label><input type="text" id="sNote" data-f="note" value="${esc(s.note)}" placeholder="e.g. Above stall row, away from vent" autocomplete="off"></div>
+    ${r ? '<button class="btn" data-act="selRoom">Select room</button>' : ''}
+    <button class="btn danger ${armed ? 'armed' : ''}" data-act="delSensor">${armed ? 'Tap again to delete' : 'Delete sensor'}</button>`;
+}
+function autoPanel(F, r, idx) {
+  const g = grid(r, F);
+  return `<div class="sec"><span class="k">Auto-placed sensor</span><h2>${esc(r.name)}</h2>
+    <p>Sensor ${idx + 1} of ${g.count} in a ${g.nx} × ${g.ny} grid. Drag it to switch this room to a hand-placed layout.</p></div>
+    <button class="btn" data-act="selRoom">Select room</button>`;
+}
+function detectPanel() {
+  const d = S.detect;
+  return `<div class="sec"><span class="k">Detect settings</span>
+    <div class="field"><label class="k" for="thr">Wall darkness · <span class="num">${d.thr}</span></label><input type="range" id="thr" data-f="thr" min="60" max="230" value="${d.thr}"></div>
+    <div class="field"><label class="k" for="gap">Gap seal · <span class="num">${d.gap}</span></label><input type="range" id="gap" data-f="gap" min="0" max="24" value="${d.gap}"></div>
+    <p class="note">Gap seal closes door openings so the outline stops at the doorway. Raise it if outlines spill into the hallway; lower it if small rooms get missed.</p></div>`;
+}
+function summaryPanel(F) {
+  const st = floorStats(F), p = S.P, total = projectTotal();
+  const rows = p.classes.map(c => ({c, b: st.by.get(c.id)})).filter(x => x.b.rooms).map(({c, b}) =>
+    `<tr><td><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</td><td>${b.rooms}</td><td>${fmtInt(b.sqft)}</td><td>${b.sensors}</td></tr>`).join('');
+  const isPh = p.settings.cigCov === PLACEHOLDER.cigCov && p.settings.vapeCov === PLACEHOLDER.vapeCov;
+  const pooled = p.settings.cigCov > 0 ? Math.ceil(st.generalSqft / p.settings.cigCov - 1e-9) : 0;
+  return `<div class="tb">
+      <div class="w"><span class="k">Project</span><span class="v">${esc(p.name)}</span></div>
+      <div><span class="k">Floor</span><span class="v">${esc(F.name)}</span></div>
+      <div><span class="k">Scale</span><span class="v num">${F.pxPerFt ? (F.pxPerFt.toFixed(2) + ' px/ft') : 'Not set'}</span></div>
+      <div><span class="k">Floor sensors</span><span class="big">${st.total}</span></div>
+      <div><span class="k">All floors</span><span class="big">${total}</span></div>
+    </div>
+    ${!F.pxPerFt ? '<div class="warnbox">No scale on this floor. Use the Scale tool on a known dimension, or type a room’s size and set the scale from it.</div>' : ''}
+    ${st.missing ? `<div class="warnbox">${st.missing} room${st.missing > 1 ? 's have' : ' has'} no dimensions, so ${st.missing > 1 ? 'they get' : 'it gets'} no sensors yet.</div>` : ''}
+    ${F.rooms.length ? `<table class="tbl"><thead><tr><th>Class</th><th>Rooms</th><th>Sq ft</th><th>Sensors</th></tr></thead><tbody>${rows}
+      ${st.unassigned ? `<tr><td>Priority, outside rooms</td><td>–</td><td>–</td><td>${st.unassigned}</td></tr>` : ''}
+      <tr class="tot"><td>This floor</td><td>${F.rooms.length}</td><td>${fmtInt([...st.by.values()].reduce((a, b) => a + b.sqft, 0))}</td><td>${st.total}</td></tr></tbody></table>`
+      : `<p>No rooms marked on this floor yet. Pick <b>Room</b> to drag one out, or <b>Detect</b> and tap inside a room.</p>`}
+    <div class="sec"><span class="k">Coverage ${isPh ? '<span class="tag warn">Placeholder</span>' : ''}</span>
+      <div class="stat"><span>Cig / THC · ${fmtInt(p.settings.cigCov)} sq ft</span><span class="num">${spacing('general').toFixed(1)} ft grid</span></div>
+      <div class="stat"><span>Vape · ${fmtInt(p.settings.vapeCov)} sq ft</span><span class="num">${spacing('vape').toFixed(1)} ft grid</span></div>
+      ${isPh ? '<p class="note">These ranges are stand-ins. Enter the sensor’s rated coverage in Settings before quoting.</p>' : ''}
+      ${st.generalSqft ? `<p class="note">For comparison: pooling this floor’s ${fmtInt(st.generalSqft)} sq ft of Cig / THC area would give ${pooled} sensors. Totals use the per-room grid.</p>` : ''}</div>
+    <div class="sec"><span class="k">Export</span><div class="btns"><button class="btn" data-act="csv">Room list (CSV)</button><button class="btn" data-act="png">Marked-up plan (PNG)</button></div></div>
+    <p class="note">Glyphs: <b>S</b> auto Cig/THC · <b>V</b> auto vape · <b>P</b> priority · <b>M</b> hand-placed layout.</p>`;
+}
+
+insp.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const F = curFloor(), act = b.dataset.act, s = S.sel;
+  const room = s && s.type === 'room' ? F.rooms.find(r => r.id === s.id) : null;
+  switch (act) {
+    case 'addFloor': return S.demo ? toast('Start a real project first, then add its floors.') : openAddFloor();
+    case 'cls': if (room) mutate(() => { const old = clsOf(room.cls); room.cls = b.dataset.id; S.lastCls = b.dataset.id; if (room.autoName && room.name.startsWith(old.name + ' ')) room.name = nextName(b.dataset.id); }); break;
+    case 'clearDim': if (room) mutate(() => { room.dim = null; }); break;
+    case 'scaleFromRoom': if (room && room.dim) mutate(() => { F.pxPerFt = (room.w / room.dim.l + room.h / room.dim.w) / 2; F.scaleLine = null; room.dim = null; toast(`Scale set from ${room.name}: ${F.pxPerFt.toFixed(2)} px per ft.`); }); break;
+    case 'resetAuto': if (room) mutate(() => { F.sensors = F.sensors.filter(x => !(x.roomId === room.id && x.detached)); room.auto = true; }); break;
+    case 'delRoom': case 'delSensor': {
+      const key = (act === 'delRoom' ? 'room:' : 'sensor:') + s.id;
+      if (S.armed === key) { S.armed = null; deleteSelection(); } else { S.armed = key; renderInspector(); setTimeout(() => { if (S.armed === key) { S.armed = null; renderInspector(); } }, 3500); }
+      break;
+    }
+    case 'selRoom': { const id = s.type === 'auto' ? s.roomId : F.sensors.find(x => x.id === s.id)?.roomId; if (id) select({type: 'room', id}); break; }
+    case 'cancelScale': S.pendingScale = null; renderInspector(); req(); break;
+    case 'setScale': {
+      const ft = parseFt($('#scaleLen').value); if (!ft) return toast('Enter a length like 30 or 12\'6".');
+      const ps = S.pendingScale; S.pendingScale = null;
+      mutate(() => { F.pxPerFt = dist(ps.a, ps.b) / ft; F.scaleLine = {a: ps.a, b: ps.b, ft}; });
+      toast(`Scale set: ${F.pxPerFt.toFixed(2)} px per ft.`); setTool('select'); break;
+    }
+    case 'csv': exportCSV(); break;
+    case 'png': exportPNG(); break;
+  }
+});
+insp.addEventListener('change', e => {
+  const t = e.target, f = t.dataset.f; if (!f) return; const F = curFloor(), s = S.sel;
+  if (f === 'name' && s?.type === 'room') { const r = F.rooms.find(x => x.id === s.id); const v = t.value.trim(); if (r && v && v !== r.name) mutate(() => { r.name = v; r.autoName = false; }); }
+  if ((f === 'dimL' || f === 'dimW') && s?.type === 'room') {
+    const r = F.rooms.find(x => x.id === s.id); if (!r) return; const v = parseFt(t.value);
+    if (!v) { toast('Enter a length like 30 or 12\'6".'); renderInspector(); return; }
+    const cur = dims(r, F) || {l: null, w: null}, l = f === 'dimL' ? v : cur.l, w = f === 'dimW' ? v : cur.w;
+    if (l && w) { S.pendDim = null; mutate(() => { r.dim = {l, w}; }); }
+    else { if (!S.pendDim || S.pendDim.id !== r.id) S.pendDim = {id: r.id}; S.pendDim[f] = v; const {dimL: pl, dimW: pw} = S.pendDim; if (pl && pw) { S.pendDim = null; mutate(() => { r.dim = {l: pl, w: pw}; }); } }
+  }
+  if (f === 'note' && s?.type === 'sensor') { const x = F.sensors.find(y => y.id === s.id); if (x && x.note !== t.value) mutate(() => { x.note = t.value.trim(); }); }
+});
+insp.addEventListener('input', e => {
+  const t = e.target, f = t.dataset.f; if (f !== 'thr' && f !== 'gap') return;
+  S.detect[f] = +t.value; LS.set('detect', S.detect); t.previousElementSibling.querySelector('.num').textContent = t.value;
+});
+insp.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'scaleLen') { e.preventDefault(); insp.querySelector('[data-act="setScale"]').click(); } else if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur(); });
+
+/* ---------- rail ---------- */
+$('#rail').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  if (b.dataset.tool) return setTool(b.dataset.tool);
+  if (b.id === 'fitBtn') fit();
+  if (b.id === 'cellsBtn') { S.showCells = !S.showCells; LS.set('cells', S.showCells); renderHeader(); req(); }
+  if (b.id === 'undoBtn') undo();
+  if (b.id === 'redoBtn') redo();
+});
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input,select,textarea') || !$('#sheet').hidden) { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); return; }
+  const k = e.key.toLowerCase();
+  if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (e.metaKey || e.ctrlKey) return;
+  const map = {v: 'select', r: 'room', d: 'detect', s: 'sensor', m: 'scale'};
+  if (map[k]) setTool(map[k]);
+  else if (k === 'backspace' || k === 'delete') deleteSelection();
+  else if (k === 'escape') { S.pendingScale = null; select(null); }
+  else if (k === 'f') fit();
+});
+
+/* ---------- floors & projects ---------- */
+async function loadImage(F) {
+  if (S.imgs.has(F.id)) return S.imgs.get(F.id);
+  if (!F.imageRef || !S.store) return null;
+  const url = await S.store.imageUrl(F.imageRef); if (!url) return null;
+  const img = new Image(); img.decoding = 'async';
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; }).catch(() => null);
+  if (!img.naturalWidth) { toast(`Couldn’t load the plan image for ${F.name}.`); return null; }
+  S.imgs.set(F.id, img); return img;
+}
+async function setFloor(fid) {
+  S.fid = fid; S.sel = null; S.pendingScale = null; G = null;
+  if (!S.demo && S.P) LS.set('floor:' + S.P.id, fid);
+  renderHeader(); renderInspector(); fit();
+  const F = curFloor(); $('#empty').hidden = !!F;
+  if (!F) { $('#empty').innerHTML = `<div><p>No floor plans yet.</p><p><button class="btn primary" data-act="addFloor" id="emptyAdd">Add a floor plan</button></p></div>`; return; }
+  if (!S.imgs.has(F.id)) { $('#busy').hidden = false; await loadImage(F); $('#busy').hidden = true; }
+  req();
+}
+$('#empty').addEventListener('click', e => { if (e.target.closest('[data-act="addFloor"]')) openAddFloor(); });
+async function openProject(id) {
+  try {
+    const p = await S.store.getProject(id); if (!p) throw new Error('missing');
+    p.classes = p.classes && p.classes.length ? p.classes : clone(DEFAULT_CLASSES);
+    p.settings = {...{cigCov: PLACEHOLDER.cigCov, vapeCov: PLACEHOLDER.vapeCov}, ...(p.settings || {})}; p.schema = p.schema || 1;
+    const floors = (await S.store.listFloors(id)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const f of floors) { f.rooms = f.rooms || []; f.sensors = f.sensors || []; }
+    S.P = p; S.floors = floors; S.demo = false; S.imgs.clear(); S.ana.clear(); S.hist.clear(); S.lastCls = null;
+    LS.set('project', id); setSave('saved');
+    const last = LS.get('floor:' + id, null);
+    await setFloor(floors.some(f => f.id === last) ? last : (floors[0] ? floors[0].id : null));
+  } catch { toast('Couldn’t open that project.'); }
+}
+async function refreshProjects() { try { S.projects = (await S.store.listProjects()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)); } catch { S.projects = []; } }
+
+/* ---------- sheets ---------- */
+const sheet = $('#sheet'), card = $('#sheetCard');
+function openSheet(html) { card.innerHTML = html; sheet.hidden = false; const f = card.querySelector('input[type=text]'); if (f && window.matchMedia('(pointer:fine)').matches) f.focus(); }
+function closeSheet() { sheet.hidden = true; card.innerHTML = ''; S.sheetState = null; }
+sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
+const closeBtn = '<button class="ibtn" data-act="close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
+
+async function openProjects() {
+  if (S.store) await refreshProjects();
+  const kind = S.store ? S.store.kind : 'memory';
+  let where = kind === 'local' ? 'Projects and plan images are stored on this iPad only. Nothing is uploaded.' : 'Storage isn’t available here, so projects last until you close the app.';
+  try { if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); where += ` Using ${(e.usage / 1048576).toFixed(1)} MB.`; } } catch {}
+  if (kind === 'local') where += S.persisted ? ' Storage is marked persistent.' : ' Back up projects you care about; iPadOS can clear app data if the device runs out of space.';
+  const standalone = navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+  const install = standalone ? '' : '<div class="warnbox">To install: tap Share, then Add to Home Screen, and open the planner from that icon from now on. The Home Screen copy works offline and keeps its own projects, separate from Safari.</div>';
+  const items = S.projects.map(p => `<div class="pitem" aria-current="${!S.demo && S.P && p.id === S.P.id}"><div class="grow"><div class="nm">${esc(p.name)}</div><div class="note">${esc(p.siteType || '')}${p.updatedAt ? ' · edited ' + new Date(p.updatedAt).toLocaleDateString() : ''}</div></div>
+    <button class="btn" data-act="openP" data-id="${esc(p.id)}">Open</button><button class="btn" data-act="backupP" data-id="${esc(p.id)}">Back up</button><button class="btn danger" data-act="delP" data-id="${esc(p.id)}">Delete</button></div>`).join('');
+  openSheet(`<div class="sheet-head"><h2>Projects</h2>${closeBtn}</div>${install}
+    <div class="sec"><span class="k">New project</span>
+      <div class="field"><label class="k" for="npName">Building name</label><input type="text" id="npName" placeholder="e.g. Fairborn High School" autocomplete="off"></div>
+      <div class="field"><label class="k" for="npType">Site type</label><select id="npType"><option>School</option><option>Hotel</option><option>Other</option></select></div>
+      <button class="btn primary" data-act="createP">Create and add first floor</button></div>
+    <div class="sec"><span class="k">Saved projects</span>${items ? `<div class="plist">${items}</div>` : '<p class="note">None yet.</p>'}</div>
+    <div class="sec"><span class="k">Restore</span><label class="btn" for="restoreFile" style="display:block">Restore a project from a backup file</label><input type="file" id="restoreFile" accept=".json,application/json" hidden></div>
+    <div class="sec"><button class="btn" data-act="demo">Open the example school wing</button><p class="note">${where}</p></div>`);
+}
+async function openAddFloor() {
+  const n = S.floors.length + 1;
+  S.sheetState = {blob: null, w: 0, h: 0, pdf: null, page: 1, file: null};
+  openSheet(`<div class="sheet-head"><h2>Add a floor</h2>${closeBtn}</div>
+    <div class="field"><label class="k" for="flName">Floor name</label><input type="text" id="flName" value="${n === 1 ? 'Level 1' : 'Level ' + n}" autocomplete="off"></div>
+    <div class="drop"><span>Floor plan, evacuation map, or a photo of one</span>
+      <label class="btn primary" for="flFile" style="display:inline-block">Choose image or PDF</label>
+      <input type="file" id="flFile" accept="image/*,application/pdf,.pdf" hidden>
+      <span class="note" id="flInfo">JPG, PNG, HEIC or PDF. Straight-on photos work best.</span></div>
+    <div class="field" id="flPageWrap" hidden><label class="k" for="flPage">PDF page</label><select id="flPage"></select></div>
+    <img class="preview" id="flPrev" alt="Plan preview" hidden>
+    <div class="btns"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveFloor" id="flSave" disabled>Add floor</button></div>`);
+}
+function openFloorSheet() {
+  const F = curFloor(); if (!F) return;
+  openSheet(`<div class="sheet-head"><h2>${esc(F.name)}</h2>${closeBtn}</div>
+    <div class="field"><label class="k" for="frName">Floor name</label><input type="text" id="frName" value="${esc(F.name)}" autocomplete="off"></div>
+    <div class="btns"><button class="btn primary" data-act="renameF">Save name</button></div>
+    <div class="sec"><span class="k">Delete</span><p class="note">Removes this floor, its plan image, its rooms and its sensors.</p><button class="btn danger" data-act="delF">Delete floor</button></div>`);
+}
+const classRows = cls => cls.map((c, i) => `<div class="cls-row" data-i="${i}"><button class="swatch" data-act="swatch" data-i="${i}" style="background:${c.color}" aria-label="Change color for ${esc(c.name)}"></button>
+    <input type="text" data-cf="name" data-i="${i}" value="${esc(c.name)}" aria-label="Class name">
+    <select data-cf="mode" data-i="${i}" aria-label="Detection for ${esc(c.name)}">${['vape', 'general', 'none'].map(m => `<option value="${m}" ${c.mode === m ? 'selected' : ''}>${MODE_LABEL[m]}</option>`).join('')}</select>
+    <button class="ibtn" data-act="delCls" data-i="${i}" aria-label="Remove ${esc(c.name)}">✕</button></div>`).join('');
+function openSettings() {
+  const p = S.P, st = p.settings, rows = classRows(p.classes);
+  openSheet(`<div class="sheet-head"><h2>Settings</h2>${closeBtn}</div>
+    <div class="row2"><div class="field"><label class="k" for="stName">Project name</label><input type="text" id="stName" value="${esc(p.name)}" autocomplete="off"></div>
+      <div class="field"><label class="k" for="stType">Site type</label><select id="stType">${['School', 'Hotel', 'Other'].map(t => `<option ${p.siteType === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div>
+    <div class="sec"><span class="k">Sensor coverage (sq ft per sensor)</span>
+      <div class="row2"><div class="field"><label class="k" for="stCig">Cig / THC</label><input type="number" id="stCig" min="1" step="1" value="${st.cigCov}"></div>
+      <div class="field"><label class="k" for="stVape">Vape</label><input type="number" id="stVape" min="1" step="1" value="${st.vapeCov}"></div></div>
+      <p class="note">Grid spacing is the square root of coverage. Each sensor gets a square cell, and each room gets ROUNDUP(L ÷ spacing) × ROUNDUP(W ÷ spacing) sensors. The defaults (1,000 and 500) are placeholders, not a spec.</p></div>
+    <div class="sec"><span class="k">Room classes</span>${rows}<button class="btn" data-act="addCls">Add class</button>
+      <p class="note">Vape classes use the vape spacing; Cig / THC classes use the wider one. Removing a class moves its rooms to Other.</p></div>
+    <div class="btns"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveSettings">Save settings</button></div>`);
+  S.sheetState = {classes: clone(p.classes)};
+}
+card.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return; const act = b.dataset.act;
+  if (act === 'close') return closeSheet();
+  if (act === 'demo') { closeSheet(); return openDemo(); }
+  if (act === 'createP') {
+    const name = $('#npName').value.trim(); if (!name) return toast('Give the building a name.');
+    const p = newProject(name, $('#npType').value);
+    try { await S.store.saveProject(p); } catch { return toast('Couldn’t create the project. Check your connection and try again.'); }
+    closeSheet(); await openProject(p.id); return openAddFloor();
+  }
+  if (act === 'openP') { closeSheet(); return openProject(b.dataset.id); }
+  if (act === 'backupP') { b.disabled = true; try { await backupProject(b.dataset.id); } finally { b.disabled = false; } return; }
+  if (act === 'delP') {
+    if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap to confirm'; b.classList.add('armed'); return; }
+    b.disabled = true; try { await S.store.deleteProject(b.dataset.id); } catch { toast('Couldn’t delete that project.'); }
+    if (!S.demo && S.P && S.P.id === b.dataset.id) { await refreshProjects(); if (S.projects[0]) await openProject(S.projects[0].id); else openDemo(); }
+    return openProjects();
+  }
+  if (act === 'saveFloor') return saveNewFloor();
+  if (act === 'renameF') { const v = $('#frName').value.trim(); const F = curFloor(); if (v && F) { F.name = v; changed(); } return closeSheet(); }
+  if (act === 'delF') {
+    if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to delete this floor'; b.classList.add('armed'); return; }
+    const F = curFloor(); if (!F) return; b.disabled = true;
+    if (!S.demo) { try { await S.store.deleteFloor(S.P.id, F); } catch { b.disabled = false; return toast('Couldn’t delete the floor.'); } }
+    S.floors = S.floors.filter(f => f.id !== F.id); S.imgs.delete(F.id); S.dirtyFloors.delete(F.id); closeSheet();
+    changed({projectOnly: true}); return setFloor(S.floors[0] ? S.floors[0].id : null);
+  }
+  if (act === 'swatch') { const c = S.sheetState.classes[+b.dataset.i]; c.color = PALETTE[(PALETTE.indexOf(c.color) + 1) % PALETTE.length]; b.style.background = c.color; return; }
+  if (act === 'addCls') { syncClassInputs(); S.sheetState.classes.push({id: uid(), name: 'New class', mode: 'general', color: PALETTE[S.sheetState.classes.length % PALETTE.length]}); return rerenderClasses(); }
+  if (act === 'delCls') { syncClassInputs(); const cl = S.sheetState.classes; if (cl.length <= 1) return; const [gone] = cl.splice(+b.dataset.i, 1); if (gone.id === 'other') { cl.splice(+b.dataset.i, 0, gone); return toast('Other is the fallback class and can’t be removed.'); } return rerenderClasses(); }
+  if (act === 'saveSettings') {
+    syncClassInputs(); const p = S.P, cig = +$('#stCig').value, vape = +$('#stVape').value;
+    if (!(cig > 0 && vape > 0)) return toast('Coverage values must be above zero.');
+    p.name = $('#stName').value.trim() || p.name; p.siteType = $('#stType').value; p.settings.cigCov = cig; p.settings.vapeCov = vape;
+    const ids = new Set(S.sheetState.classes.map(c => c.id)); p.classes = S.sheetState.classes;
+    if (!ids.has('other')) p.classes.push(DEFAULT_CLASSES.find(c => c.id === 'other'));
+    for (const F of S.floors) { let hit = false; for (const r of F.rooms) if (!ids.has(r.cls)) { r.cls = 'other'; hit = true; } if (hit) S.dirtyFloors.add(F.id); }
+    closeSheet(); changed({projectOnly: true}); return;
+  }
+});
+function syncClassInputs() { card.querySelectorAll('[data-cf]').forEach(i => { const c = S.sheetState.classes[+i.dataset.i]; if (c) c[i.dataset.cf] = i.dataset.cf === 'name' ? (i.value.trim() || c.name) : i.value; }); }
+function rerenderClasses() { card.querySelectorAll('.cls-row').forEach(r => r.remove()); card.querySelector('[data-act="addCls"]').insertAdjacentHTML('beforebegin', classRows(S.sheetState.classes)); }
+card.addEventListener('change', async e => {
+  if (e.target.id === 'flFile') { const f = e.target.files[0]; if (f) await loadPlanFile(f, 1); }
+  if (e.target.id === 'restoreFile') { const f = e.target.files[0]; if (f) await restoreBackup(f); }
+  if (e.target.id === 'flPage') { const st = S.sheetState; if (st && st.file) await loadPlanFile(st.file, +e.target.value); }
+});
+
+/* ---------- plan import ---------- */
+const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+const PDFJS_WORKER = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('load')); document.head.appendChild(s); }); }
+async function ensurePdf() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  await loadScript(PDFJS_WORKER); await loadScript(PDFJS);
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; return window.pdfjsLib;
+}
+async function loadPlanFile(file, page) {
+  const st = S.sheetState; if (!st) return; st.file = file; const info = $('#flInfo'); info.textContent = 'Reading the plan…'; $('#flSave').disabled = true;
+  try {
+    let canvas;
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      let lib; try { lib = await ensurePdf(); } catch { info.textContent = 'PDF support didn’t load. Take a screenshot of the plan and add it as an image instead.'; return; }
+      if (!st.pdf) st.pdf = await lib.getDocument({data: new Uint8Array(await file.arrayBuffer())}).promise;
+      const n = st.pdf.numPages; page = clamp(page, 1, n);
+      const pw = $('#flPageWrap'); pw.hidden = n < 2; if (n > 1 && !$('#flPage').options.length) $('#flPage').innerHTML = Array.from({length: n}, (_, i) => `<option value="${i + 1}">Page ${i + 1}</option>`).join('');
+      const pg = await st.pdf.getPage(page), v1 = pg.getViewport({scale: 1}), sc = Math.min(5, 3200 / Math.max(v1.width, v1.height)), vp = pg.getViewport({scale: sc});
+      canvas = document.createElement('canvas'); canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+      const x = canvas.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, canvas.width, canvas.height);
+      await pg.render({canvasContext: x, viewport: vp}).promise;
+    } else {
+      const url = URL.createObjectURL(file), img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+      const sc = Math.min(1, 4000 / Math.max(img.naturalWidth, img.naturalHeight));
+      canvas = document.createElement('canvas'); canvas.width = Math.round(img.naturalWidth * sc); canvas.height = Math.round(img.naturalHeight * sc);
+      const x = canvas.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, canvas.width, canvas.height); x.drawImage(img, 0, 0, canvas.width, canvas.height); URL.revokeObjectURL(url);
+    }
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', .9));
+    if (!blob) throw new Error('encode');
+    st.blob = blob; st.w = canvas.width; st.h = canvas.height;
+    const prev = $('#flPrev'); prev.src = URL.createObjectURL(blob); prev.hidden = false;
+    info.textContent = `${file.name} · ${canvas.width} × ${canvas.height} px · ${(blob.size / 1048576).toFixed(1)} MB`; $('#flSave').disabled = false;
+  } catch { info.textContent = 'That file couldn’t be read. Try a JPG, PNG or PDF.'; }
+}
+async function saveNewFloor() {
+  const st = S.sheetState; if (!st || !st.blob) return; const btn = $('#flSave'); btn.disabled = true; btn.textContent = 'Uploading…';
+  try {
+    const ref = await S.store.putImage(st.blob);
+    const F = {id: uid(), name: $('#flName').value.trim() || 'Level ' + (S.floors.length + 1), order: S.floors.length, imageRef: ref, imgW: st.w, imgH: st.h, pxPerFt: null, scaleLine: null, rooms: [], sensors: []};
+    await S.store.saveFloor(S.P.id, F); S.floors.push(F); S.dirtyProject = true; scheduleSave(); closeSheet();
+    await setFloor(F.id); setTool('scale'); toast('Floor added. Start by drawing the Scale line along a dimension you know.'); flushSave();
+  } catch (e) { btn.disabled = false; btn.textContent = 'Add floor'; toast(e && e.code === 'too_large' ? 'That image is too large. Try a smaller export.' : 'Upload failed. Check your connection and try again.'); }
+}
+$('#projBtn').addEventListener('click', openProjects);
+$('#setBtn').addEventListener('click', () => S.P && openSettings());
+$('#startBtn').addEventListener('click', openProjects);
+
+/* ---------- exports ---------- */
+const MIME = {csv: 'text/csv', png: 'image/png', json: 'application/json'};
+async function saveFile(name, data) {
+  const type = MIME[name.split('.').pop()] || 'application/octet-stream';
+  const blob = data instanceof Blob ? data : new Blob([data], {type});
+  try {
+    const file = new File([blob], name, {type});
+    if (navigator.canShare && navigator.canShare({files: [file]})) { await navigator.share({files: [file], title: name}); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 8000);
+}
+const slug = s => String(s).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
+function buildCSV() {
+  const p = S.P, q = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const rows = [['Project', 'Floor', 'Room', 'Class', 'Detection', 'Length (ft)', 'Width (ft)', 'Sq ft', 'Grid', 'Auto sensors', 'Hand-placed / priority', 'Total sensors', 'Notes']];
+  let grand = 0;
+  for (const F of S.floors) {
+    for (const r of F.rooms) {
+      const c = clsOf(r.cls), d = dims(r, F), g = grid(r, F), man = F.sensors.filter(s => s.roomId === r.id), a = r.auto ? g.count : 0;
+      grand += a + man.length;
+      rows.push([p.name, F.name, r.name, c.name, MODE_LABEL[c.mode], d ? d.l.toFixed(2) : '', d ? d.w.toFixed(2) : '', d ? Math.round(d.l * d.w) : '', g.count ? `${g.nx} x ${g.ny}` : '', a, man.length, a + man.length, man.map(s => s.note).filter(Boolean).join('; ')]);
+    }
+    const loose = F.sensors.filter(s => !s.roomId || !F.rooms.some(r => r.id === s.roomId));
+    if (loose.length) { grand += loose.length; rows.push([p.name, F.name, 'Priority sensors outside marked rooms', '', '', '', '', '', '', 0, loose.length, loose.length, loose.map(s => s.note).filter(Boolean).join('; ')]); }
+  }
+  rows.push([]); rows.push(['Total sensors', '', '', '', '', '', '', '', '', '', '', grand]);
+  rows.push(['Cig / THC coverage (sq ft per sensor)', p.settings.cigCov]); rows.push(['Vape coverage (sq ft per sensor)', p.settings.vapeCov]);
+  return rows.map(r => r.map(q).join(',')).join('\r\n');
+}
+function exportCSV() { saveFile(`${slug(S.P.name)}-sensors.csv`, buildCSV()); }
+async function exportPNG() {
+  const F = curFloor(); if (!F) return; await loadImage(F);
+  const c = document.createElement('canvas'); c.width = F.imgW; c.height = F.imgH; const x = c.getContext('2d');
+  const px = Math.max(1, F.imgW / 1300);
+  drawScene(x, F, px, {sel: null, live: false});
+  const st = floorStats(F), label = `${S.P.name} · ${F.name} · ${st.total} sensors · ${new Date().toLocaleDateString()}`;
+  x.font = `600 ${15 * px}px "Avenir Next Condensed","Arial Narrow",Arial,sans-serif`; const tw = x.measureText(label).width;
+  x.fillStyle = 'rgba(255,255,255,.94)'; x.fillRect(8 * px, 8 * px, tw + 20 * px, 28 * px); x.strokeStyle = '#1b2124'; x.lineWidth = 1.5 * px; x.strokeRect(8 * px, 8 * px, tw + 20 * px, 28 * px);
+  x.fillStyle = '#1b2124'; x.textBaseline = 'middle'; x.fillText(label, 18 * px, 22 * px);
+  c.toBlob(b => b ? saveFile(`${slug(S.P.name)}-${slug(F.name)}.png`, b) : toast('Couldn’t render the image.'), 'image/png');
+}
+
+
+/* ---------- backup & restore (also the import format for a future native app) ---------- */
+const BACKUP_FORMAT = 'sensor-layout-planner-backup';
+const blobToB64 = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
+function b64ToBlob(b64, type) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], {type}); }
+async function backupProject(pid) {
+  if (!S.demo && S.P && S.P.id === pid) { clearTimeout(S.saveT); await flushSave(); }
+  const p = await S.store.getProject(pid); if (!p) return toast('Couldn’t find that project.');
+  const floors = (await S.store.listFloors(pid)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const out = {format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), units: 'feet; room x/y/w/h in plan-image pixels', project: p, floors: []};
+  for (const f of floors) {
+    const blob = f.imageRef ? await S.store.getImageBlob(f.imageRef) : null;
+    const {imageRef, ...rest} = f;
+    out.floors.push({...rest, image: blob ? {type: blob.type || 'image/jpeg', base64: await blobToB64(blob)} : null});
+  }
+  const d = new Date(), stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  await saveFile(`${slug(p.name)}-backup-${stamp}.json`, JSON.stringify(out));
+}
+async function restoreBackup(file) {
+  let o; try { o = JSON.parse(await file.text()); } catch { return toast('That file isn’t a project backup.'); }
+  if (!o || o.format !== BACKUP_FORMAT || !o.project) return toast('That file isn’t a project backup from this app.');
+  const clash = await S.store.getProject(o.project.id);
+  const p = {...o.project}; if (clash) { p.id = uid(); p.name = p.name + ' (restored)'; }
+  p.updatedAt = Date.now();
+  try {
+    for (const f of o.floors || []) {
+      const {image, ...rest} = f;
+      const ref = image && image.base64 ? await S.store.putImage(b64ToBlob(image.base64, image.type || 'image/jpeg')) : null;
+      await S.store.saveFloor(p.id, {...rest, id: clash ? uid() : rest.id, imageRef: ref, rooms: rest.rooms || [], sensors: rest.sensors || []});
+    }
+    await S.store.saveProject(p);
+  } catch { return toast('Restore failed partway. The iPad may be low on space.'); }
+  closeSheet(); await openProject(p.id); toast(`Restored ${p.name}.`);
+}
+
+/* ---------- toast ---------- */
+let toastT = 0;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3800); }
+
+/* ---------- example project (generated, never saved) ---------- */
+function makeDemo() {
+  const K = 12, W = 200 * K, H = 125 * K, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
+  const X = f => (f + 10) * K, Y = f => (f + 10) * K;
+  const rooms = [
+    ['CLASSROOM 101', 0, 0, 30, 30, 'classroom'], ['CLASSROOM 102', 30, 0, 60, 30, 'classroom'], ['CLASSROOM 103', 60, 0, 90, 30, 'classroom'],
+    ['BOYS', 90, 0, 110, 30, 'bathroom'], ['GIRLS', 110, 0, 130, 30, 'bathroom'], ['OFFICE', 130, 0, 166, 30, 'office'],
+    ['STAFF', 166, 0, 180, 10, 'bathroom'], ['MECH', 166, 10, 180, 30, 'none'], ['CORRIDOR', 0, 30, 180, 40, 'hallway'],
+    ['GYMNASIUM', 0, 40, 80, 100, 'large'], ['BOYS LOCKER', 80, 40, 100, 70, 'locker'], ['GIRLS LOCKER', 100, 40, 120, 70, 'locker'],
+    ['CLASSROOM 104', 80, 70, 120, 100, null], ['CAFETERIA', 120, 40, 180, 100, 'large'],
+  ];
+  x.strokeStyle = '#1e2225'; x.lineCap = 'square';
+  x.lineWidth = 6; for (const r of rooms) x.strokeRect(X(r[1]), Y(r[2]), (r[3] - r[1]) * K, (r[4] - r[2]) * K);
+  x.lineWidth = 11; x.strokeRect(X(0), Y(0), 180 * K, 100 * K);
+  const doorH = (a, b, wy, into) => { x.fillStyle = '#fff'; x.fillRect(X(a), Y(wy) - 7, (b - a) * K, 14); x.lineWidth = 2; x.strokeStyle = '#1e2225';
+    const hx = X(a), hy = Y(wy), L = (b - a) * K, s = into; x.beginPath(); x.moveTo(hx, hy); x.lineTo(hx, hy + s * L); x.stroke(); x.beginPath(); x.arc(hx, hy, L, s > 0 ? 0 : -Math.PI / 2, s > 0 ? Math.PI / 2 : 0); x.stroke(); };
+  const doorV = (a, b, wx, into) => { x.fillStyle = '#fff'; x.fillRect(X(wx) - 7, Y(a), 14, (b - a) * K); x.lineWidth = 2; x.strokeStyle = '#1e2225';
+    const hx = X(wx), hy = Y(a), L = (b - a) * K, s = into; x.beginPath(); x.moveTo(hx, hy); x.lineTo(hx + s * L, hy); x.stroke(); x.beginPath(); x.arc(hx, hy, L, s > 0 ? 0 : Math.PI / 2, s > 0 ? Math.PI / 2 : Math.PI); x.stroke(); };
+  for (const d of [22, 52, 82, 98, 118, 156, 168]) doorH(d, d + 3, 30, -1);
+  for (const d of [86, 106]) doorH(d, d + 3, 40, 1);
+  doorH(30, 36, 40, 1); doorH(140, 146, 40, 1);
+  doorV(3, 6, 166, -1); doorV(80, 83, 120, -1); doorV(32, 37, 0, 1); doorV(32, 37, 180, -1);
+  x.fillStyle = '#2b3135'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  for (const r of rooms) { const w = (r[3] - r[1]) * K; x.font = `600 ${w < 200 ? 20 : 26}px Arial, sans-serif`; x.fillText(r[0], X((r[1] + r[3]) / 2), Y((r[2] + r[4]) / 2)); }
+  x.textAlign = 'left'; x.font = '600 28px Arial, sans-serif'; x.fillText('LINCOLN MIDDLE SCHOOL — EAST WING (EXAMPLE)', X(0), Y(106));
+  x.lineWidth = 3; x.strokeStyle = '#1e2225'; x.beginPath(); x.moveTo(X(130), Y(106)); x.lineTo(X(150), Y(106)); x.moveTo(X(130), Y(104.5)); x.lineTo(X(130), Y(107.5)); x.moveTo(X(140), Y(105)); x.lineTo(X(140), Y(107)); x.moveTo(X(150), Y(104.5)); x.lineTo(X(150), Y(107.5)); x.stroke();
+  x.font = '22px Arial, sans-serif'; x.fillText('0', X(129.5), Y(109.5)); x.fillText('10', X(139.2), Y(109.5)); x.fillText('20 FT', X(149.2), Y(109.5));
+  const F = {id: 'demo-floor', name: 'Level 1', order: 0, imageRef: null, imgW: W, imgH: H, pxPerFt: K, scaleLine: {a: {x: X(130), y: Y(106)}, b: {x: X(150), y: Y(106)}, ft: 20}, rooms: [], sensors: []};
+  const ids = {};
+  for (const r of rooms) { if (!r[5]) continue; const id = uid(); ids[r[0]] = id;
+    const nm = r[0] === 'BOYS' ? 'Boys restroom' : r[0] === 'GIRLS' ? 'Girls restroom' : r[0] === 'STAFF' ? 'Staff restroom' : r[0].charAt(0) + r[0].slice(1).toLowerCase();
+    F.rooms.push({id, name: nm, autoName: false, cls: r[5], x: X(r[1]) + 4, y: Y(r[2]) + 4, w: (r[3] - r[1]) * K - 8, h: (r[4] - r[2]) * K - 8, dim: null, auto: true}); }
+  F.sensors.push({id: uid(), x: X(110), y: Y(35), roomId: ids['CORRIDOR'], note: 'Outside restrooms (example)', detached: false});
+  return {canvas: c, floor: F};
+}
+function openDemo() {
+  const d = makeDemo(), p = newProject('Lincoln Middle School (example)', 'School'); p.id = 'demo';
+  S.P = p; S.floors = [d.floor]; S.demo = true; S.imgs.clear(); S.ana.clear(); S.hist.clear(); S.imgs.set(d.floor.id, d.canvas); S.lastCls = 'classroom';
+  setFloor(d.floor.id); setSave('');
+}
+
+/* ---------- theme & boot ---------- */
+readTokens();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readTokens(); req(); });
+new MutationObserver(() => { readTokens(); req(); }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(req);
+setTool('select');
+openDemo();
+(async () => {
+  S.store = await initStore();
+  await refreshProjects();
+  if (S.projects.length) {
+    const last = LS.get('project', null), pick = S.projects.find(p => p.id === last) || S.projects[0];
+    await openProject(pick.id);
+  }
+  renderHeader();
+})();
+
+/* ---------- offline install (service worker) ---------- */
+const secure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+if ('serviceWorker' in navigator && secure) {
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloading) { reloading = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    const offer = w => { const bar = $('#updbar'); bar.hidden = false; $('#updBtn').onclick = async () => { clearTimeout(S.saveT); await flushSave(); w.postMessage('skipWaiting'); }; };
+    if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
+    reg.addEventListener('updatefound', () => { const w = reg.installing; if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); }); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+  }).catch(() => {});
+}
+})();
+</script>
+</body>
+</html>
