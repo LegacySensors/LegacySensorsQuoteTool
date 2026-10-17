@@ -1,6 +1,6 @@
 /* Sensor Layout Planner — offline cache.
    Bump VERSION on every release so iPads pick up the new files. */
-const VERSION = 'slp-2026-10-16-1';
+const VERSION = 'slp-2026-10-16-2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 // PDF support is fetched once while online and kept for offline use.
 const PDFJS = ['https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'];

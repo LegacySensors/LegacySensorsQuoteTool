@@ -5,10 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Sensor Layout">
-<meta name="theme-color" content="#e8ebea" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#111517" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#0d0e0f">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
@@ -16,24 +15,14 @@
 <style>
 /* Layout: one-screen drafting workspace. Tool rail | plan sheet on a mat | title-block inspector. */
 :root{
-  --bg:#e8ebea; --panel:#f7f8f6; --raise:#ffffff; --ink:#1b2124; --ink2:#59646a; --line:#cdd3d2; --mat:#d6dbda;
-  --accent:#c4321f; --accent-ink:#ffffff; --accent-soft:rgba(196,50,31,.10);
-  --sel:#1d63c9; --ok:#2d7a4b; --warn:#a05f00; --warn-soft:rgba(160,95,0,.12);
+  /* Black / gold: black mat behind the plan, dark grey chrome, gold controls */
+  --bg:#0d0e0f; --panel:#1c1e20; --raise:#272a2d; --ink:#f2efe6; --ink2:#a9a497; --line:#34373b; --mat:#000000;
+  --accent:#d4af37; --accent-ink:#151515; --accent-soft:rgba(212,175,55,.15);
+  --sel:#d4af37; --ok:#6cc08d; --warn:#ec8d3c; --warn-soft:rgba(236,141,60,.14);
   --f-label:"Avenir Next Condensed","Arial Narrow","Roboto Condensed",Arial,sans-serif;
   --f-body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --f-num:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#111517; --panel:#192023; --raise:#212a2e; --ink:#e5eaeb; --ink2:#97a3a9; --line:#2d373b; --mat:#0b0e0f;
-    --accent:#ff5d45; --accent-ink:#1c0703; --accent-soft:rgba(255,93,69,.15);
-    --sel:#6aa8ff; --ok:#5cc28a; --warn:#e3a33b; --warn-soft:rgba(227,163,59,.14); color-scheme:dark;
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#111517; --panel:#192023; --raise:#212a2e; --ink:#e5eaeb; --ink2:#97a3a9; --line:#2d373b; --mat:#0b0e0f;
-  --accent:#ff5d45; --accent-ink:#1c0703; --accent-soft:rgba(255,93,69,.15);
-  --sel:#6aa8ff; --ok:#5cc28a; --warn:#e3a33b; --warn-soft:rgba(227,163,59,.14); color-scheme:dark;
+  color-scheme:dark;
 }
 html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);-webkit-text-size-adjust:100%}
 html,body{height:100%}
@@ -57,7 +46,7 @@ button{cursor:pointer;touch-action:manipulation}
 .floors::-webkit-scrollbar{display:none}
 .ftab{flex:none;display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 12px;font-family:var(--f-label);font-weight:600;font-size:15px;letter-spacing:.02em}
 .ftab .c{font-family:var(--f-num);font-size:12.5px;color:var(--ink2)}
-.ftab[aria-current="true"]{border-color:var(--ink);background:var(--raise);box-shadow:inset 0 -2px 0 var(--accent)}
+.ftab[aria-current="true"]{border-color:var(--accent);background:var(--raise);box-shadow:inset 0 -2px 0 var(--accent)}
 .ftab.add{color:var(--ink2);border-style:dashed}
 .top-r{display:flex;align-items:center;gap:12px;flex:none}
 .save{font-family:var(--f-label);font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);white-space:nowrap}
@@ -67,21 +56,23 @@ button{cursor:pointer;touch-action:manipulation}
 .ibtn{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line);background:var(--panel);border-radius:10px}
 .ibtn svg{width:22px;height:22px}
 
-.banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);color:var(--ink);border-radius:10px;padding:8px 12px;font-size:14px}
-.banner b{font-family:var(--f-label);letter-spacing:.06em;text-transform:uppercase;font-size:13px;color:var(--warn)}
+.banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--ink);border-radius:10px;padding:8px 12px;font-size:14px}
+.banner b{font-family:var(--f-label);letter-spacing:.06em;text-transform:uppercase;font-size:13px;color:var(--accent)}
 
 .work{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:10px}
 .rail{display:flex;align-items:center;gap:4px;padding:4px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow-x:auto;scrollbar-width:none;flex:none}
 .rail::-webkit-scrollbar{display:none}
 .tool{flex:none;display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;border:1px solid transparent;background:none;border-radius:9px;color:var(--ink2);padding:6px 12px}
-.tool svg{width:22px;height:22px;flex:none}
+.tool svg{width:22px;height:22px;flex:none;color:var(--accent)}
 .tool span{font-family:var(--f-label);font-weight:600;font-size:13px;letter-spacing:.07em;text-transform:uppercase}
 .tool[aria-pressed="true"]{background:var(--raise);border-color:var(--line);color:var(--ink);box-shadow:inset 0 -3px 0 var(--accent)}
 .tool:disabled{opacity:.35;cursor:default}
+.tool:disabled svg{color:var(--ink2)}
+.ibtn svg{color:var(--accent)}
 .rail .sep{flex:none;width:1px;align-self:stretch;background:var(--line);margin:6px 6px}
 .rail .grow{flex:1 0 8px}
 
-.stage{position:relative;min-width:0;min-height:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--mat);touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.stage{position:relative;min-width:0;min-height:0;border:1px solid #2a2c2e;border-radius:12px;overflow:hidden;background:var(--mat);touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 .hint{position:absolute;left:10px;top:10px;right:10px;pointer-events:none;display:flex}
 .hint span{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13.5px;color:var(--ink);max-width:100%;box-shadow:0 2px 10px rgba(0,0,0,.08)}
@@ -99,14 +90,14 @@ button{cursor:pointer;touch-action:manipulation}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--raise);border-radius:999px;padding:6px 11px;font-size:14px}
 .chip i{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
-.chip[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.chip[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .tag{display:inline-block;font-family:var(--f-label);font-weight:600;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;border-radius:4px;padding:1px 6px;background:var(--accent-soft);color:var(--accent)}
 .tag.neutral{background:color-mix(in srgb,var(--ink2) 14%,transparent);color:var(--ink2)}
 .tag.warn{background:var(--warn-soft);color:var(--warn)}
 .btn{border:1px solid var(--line);background:var(--raise);border-radius:9px;padding:10px 14px;font-weight:600;font-size:15px;text-align:center}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.btn.danger{color:var(--accent)}
-.btn.danger.armed{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:#ff6b5a}
+.btn.danger.armed{background:#d9412f;color:#fff;border-color:#d9412f}
 .btn:disabled{opacity:.45;cursor:default}
 .btns{display:flex;flex-wrap:wrap;gap:8px}
 .btns .btn{flex:1 1 auto}
@@ -120,8 +111,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .toggle input{width:22px;height:22px;accent-color:var(--accent)}
 
 /* title block: drawing-sheet convention */
-.tb{border:1.5px solid var(--ink);border-radius:2px;display:grid;grid-template-columns:1fr 1fr;font-size:14px}
-.tb>div{padding:6px 8px;border-right:1px solid var(--ink);border-bottom:1px solid var(--ink);display:flex;flex-direction:column;gap:2px;min-width:0}
+.tb{border:1.5px solid var(--accent);border-radius:2px;display:grid;grid-template-columns:1fr 1fr;font-size:14px}
+.tb>div{padding:6px 8px;border-right:1px solid color-mix(in srgb,var(--accent) 55%,transparent);border-bottom:1px solid color-mix(in srgb,var(--accent) 55%,transparent);display:flex;flex-direction:column;gap:2px;min-width:0}
 .tb>div:nth-child(2n){border-right:0}
 .tb>.w{grid-column:1/-1;border-right:0}
 .tb>div:nth-last-child(-n+2){border-bottom:0}
@@ -148,7 +139,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .swatch{width:40px;height:40px;border-radius:8px;border:1px solid var(--line)}
 .preview{border:1px solid var(--line);border-radius:8px;background:#fff;max-height:220px;width:100%;object-fit:contain}
 .drop{border:1.5px dashed var(--line);border-radius:10px;padding:16px;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center}
-.toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14.5px;max-width:min(520px,calc(100% - 32px));box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;background:var(--raise);color:var(--ink);border:1px solid var(--accent);padding:10px 16px;border-radius:10px;font-size:14.5px;max-width:min(520px,calc(100% - 32px));box-shadow:0 8px 24px rgba(0,0,0,.25)}
 
 .updbar{position:fixed;z-index:70;left:50%;transform:translateX(-50%);top:max(12px,env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 8px 8px 14px;box-shadow:0 10px 30px rgba(0,0,0,.2);max-width:calc(100% - 32px)}
 @media (max-width:1050px){ .work{grid-template-columns:minmax(0,1fr) 290px} .tool{flex-direction:column;gap:2px;padding:5px 6px;min-width:56px;min-height:52px} .tool span{font-size:11px} }
@@ -263,7 +254,7 @@ const DEFAULT_CLASSES = [
   {id:'other', name:'Other', mode:'general', color:'#4f6470'},
 ];
 const MODE_LABEL = {general:'Cig / THC', vape:'Vape', none:'No sensors'};
-const SENSOR_RED = '#c4321f';
+const SENSOR_RED = '#c4321f', GOLD = '#d4af37', GOLD_DK = '#8a6a0c';
 const PLACEHOLDER = {cigCov:1000, vapeCov:500};
 
 function newProject(name, siteType) {
@@ -447,7 +438,7 @@ function draw() {
   ctx.restore();
 }
 function drawScene(c, F, px, o) {
-  c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = 16 * px * (o.live ? 1 : 0); c.fillStyle = '#ffffff'; c.fillRect(0, 0, F.imgW, F.imgH); c.restore();
+  c.save(); c.fillStyle = '#ffffff'; c.fillRect(0, 0, F.imgW, F.imgH); if (o.live) { c.strokeStyle = 'rgba(212,175,55,.35)'; c.lineWidth = 1 * px; c.strokeRect(0, 0, F.imgW, F.imgH); } c.restore();
   const img = S.imgs.get(F.id);
   if (img) { c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(img, 0, 0, F.imgW, F.imgH); }
   const selRoom = o.sel && o.sel.type === 'room' ? o.sel.id : (o.sel && o.sel.type === 'auto' ? o.sel.roomId : null);
@@ -456,6 +447,7 @@ function drawScene(c, F, px, o) {
     const cl = clsOf(r.cls);
     c.fillStyle = hexA(cl.color, r.id === selRoom ? .24 : .15); c.fillRect(r.x, r.y, r.w, r.h);
     c.lineWidth = (r.id === selRoom ? 3 : 2) * px; c.strokeStyle = cl.color; c.setLineDash([]); c.strokeRect(r.x, r.y, r.w, r.h);
+    if (r.id === selRoom && o.live) { c.lineWidth = 1.5 * px; c.strokeStyle = GOLD_DK; c.setLineDash([6 * px, 4 * px]); c.strokeRect(r.x - 4 * px, r.y - 4 * px, r.w + 8 * px, r.h + 8 * px); c.setLineDash([]); }
     if (S.showCells && r.auto) {
       const g = grid(r, F);
       if (g.count > 1) {
@@ -492,16 +484,17 @@ function drawScene(c, F, px, o) {
   // selection handles
   if (o.sel && o.sel.type === 'room') {
     const r = F.rooms.find(x => x.id === o.sel.id);
-    if (r) for (const [hx, hy] of [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]]) {
-      const s = 7 * px; c.fillStyle = '#fff'; c.strokeStyle = T.sel; c.lineWidth = 2 * px; c.setLineDash([]);
+    if (r) for (const [hx, hy] of [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h], [r.x + r.w / 2, r.y], [r.x + r.w / 2, r.y + r.h], [r.x, r.y + r.h / 2], [r.x + r.w, r.y + r.h / 2]]) {
+      const s = (hx === r.x || hx === r.x + r.w) && (hy === r.y || hy === r.y + r.h) ? 9 * px : 7 * px;
+      c.fillStyle = GOLD; c.strokeStyle = '#111'; c.lineWidth = 2 * px; c.setLineDash([]);
       c.fillRect(hx - s, hy - s, 2 * s, 2 * s); c.strokeRect(hx - s, hy - s, 2 * s, 2 * s);
     }
   }
   // drafts
   if (G && G.type === 'draw' && G.moved) {
-    const r = norm(G.a, G.b); c.setLineDash([6 * px, 4 * px]); c.lineWidth = 2 * px; c.strokeStyle = T.sel; c.fillStyle = hexA('#1d63c9', .08);
+    const r = norm(G.a, G.b); c.setLineDash([6 * px, 4 * px]); c.lineWidth = 2 * px; c.strokeStyle = GOLD_DK; c.fillStyle = hexA(GOLD, .12);
     c.fillRect(r.x, r.y, r.w, r.h); c.strokeRect(r.x, r.y, r.w, r.h); c.setLineDash([]);
-    if (F.pxPerFt) { c.font = `600 ${12 * px}px ui-monospace,"SF Mono",Menlo,monospace`; halo(c, `${fmtFt(r.w / F.pxPerFt)} × ${fmtFt(r.h / F.pxPerFt)}`, r.x + 4 * px, r.y + r.h + 4 * px, px, '#1d63c9'); }
+    if (F.pxPerFt) { c.font = `600 ${12 * px}px ui-monospace,"SF Mono",Menlo,monospace`; halo(c, `${fmtFt(r.w / F.pxPerFt)} × ${fmtFt(r.h / F.pxPerFt)}`, r.x + 4 * px, r.y + r.h + 4 * px, px, GOLD_DK); }
   }
   const line = (G && G.type === 'scale' && G.moved) ? {a: G.a, b: G.b} : (S.pendingScale || (S.tool === 'scale' && F.scaleLine ? F.scaleLine : null));
   if (line) {
@@ -515,9 +508,9 @@ function drawScene(c, F, px, o) {
 function halo(c, text, x, y, px, color) { c.lineJoin = 'round'; c.lineWidth = 3.5 * px; c.strokeStyle = 'rgba(255,255,255,.92)'; c.strokeText(text, x, y); c.fillStyle = color; c.fillText(text, x, y); }
 function sensorGlyph(c, x, y, letter, filled, selected, px) {
   const r = 11 * px;
-  if (selected) { c.beginPath(); c.arc(x, y, r + 5 * px, 0, Math.PI * 2); c.fillStyle = hexA('#1d63c9', .22); c.fill(); }
+  if (selected) { c.beginPath(); c.arc(x, y, r + 6 * px, 0, Math.PI * 2); c.fillStyle = hexA(GOLD, .55); c.fill(); }
   c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fillStyle = filled ? SENSOR_RED : '#ffffff'; c.fill();
-  c.lineWidth = 2.2 * px; c.strokeStyle = selected ? '#1d63c9' : SENSOR_RED; c.setLineDash([]); c.stroke();
+  c.lineWidth = 2.2 * px; c.strokeStyle = selected ? '#111' : SENSOR_RED; c.setLineDash([]); c.stroke();
   c.fillStyle = filled ? '#ffffff' : SENSOR_RED; c.font = `700 ${12.5 * px}px "Avenir Next Condensed","Arial Narrow",Arial,sans-serif`;
   c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(letter, x, y + .5 * px); c.textAlign = 'left'; c.textBaseline = 'top';
 }
@@ -535,9 +528,11 @@ function hitSensor(ip) {
 }
 function hitHandle(ip) {
   if (!S.sel || S.sel.type !== 'room') return null; const r = curFloor().rooms.find(x => x.id === S.sel.id); if (!r) return null;
-  const tol = 20 / S.view.k, cs = {nw: [r.x, r.y], ne: [r.x + r.w, r.y], sw: [r.x, r.y + r.h], se: [r.x + r.w, r.y + r.h]};
-  for (const k in cs) if (Math.abs(ip.x - cs[k][0]) < tol && Math.abs(ip.y - cs[k][1]) < tol) return {corner: k, room: r};
-  return null;
+  const tol = 22 / S.view.k, cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+  const hs = {nw: [r.x, r.y], ne: [r.x + r.w, r.y], sw: [r.x, r.y + r.h], se: [r.x + r.w, r.y + r.h], n: [cx, r.y], s: [cx, r.y + r.h], w: [r.x, cy], e: [r.x + r.w, cy]};
+  let best = null, bd = Infinity;
+  for (const k in hs) { const dx = Math.abs(ip.x - hs[k][0]), dy = Math.abs(ip.y - hs[k][1]); if (dx < tol && dy < tol && dx + dy < bd) { bd = dx + dy; best = k; } }
+  return best ? {corner: best, room: r} : null;
 }
 
 /* ---------- gestures ---------- */
@@ -579,7 +574,7 @@ cv.addEventListener('wheel', e => {
 function startGesture(p) {
   const ip = toImg(p), tool = S.tool;
   const base = {start: p, ip, moved: false, pushed: false};
-  if (tool === 'select' || tool === 'room') { const h = hitHandle(ip); if (h) { G = {...base, type: 'resize', ...h, orig: {x: h.room.x, y: h.room.y, w: h.room.w, h: h.room.h}}; return; } }
+  if (tool !== 'scale') { const h = hitHandle(ip); if (h) { G = {...base, type: 'resize', ...h, orig: {x: h.room.x, y: h.room.y, w: h.room.w, h: h.room.h}}; return; } }
   if (tool === 'select' || tool === 'sensor') { const hs = hitSensor(ip); if (hs) { G = {...base, type: 'sensor', hit: hs}; return; } }
   if (tool === 'select') { const r = roomAt(ip); if (r) { G = {...base, type: 'room', room: r, last: ip}; return; } G = {...base, type: 'pan', v0: {...S.view}}; return; }
   if (tool === 'room') { G = {...base, type: 'draw', a: ip, b: ip}; return; }
@@ -727,7 +722,7 @@ function runDetect(ip) {
   rect.x = Math.max(0, rect.x); rect.y = Math.max(0, rect.y); rect.w = Math.min(F.imgW - rect.x, rect.w); rect.h = Math.min(F.imgH - rect.y, rect.h);
   const dup = F.rooms.find(r => iou(r, rect) > .8);
   if (dup) { select({type: 'room', id: dup.id}); return toast('That room is already marked.'); }
-  addRoom(rect); toast('Room outlined. Check the edges, then pick its class.');
+  addRoom(rect); toast('Room outlined. Drag the gold handles to fix any edge, then pick its class.');
 }
 function iou(a, b) { const x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y), x2 = Math.min(a.x + a.w, b.x + b.w), y2 = Math.min(a.y + a.h, b.y + b.h); const i = Math.max(0, x2 - x1) * Math.max(0, y2 - y1); return i / (a.w * a.h + b.w * b.h - i); }
 
@@ -758,7 +753,7 @@ let inspT = 0; function renderInspectorSoon() { clearTimeout(inspT); inspT = set
 const HINTS = {
   select: 'Tap a room or sensor to edit it. Drag empty space to pan; pinch to zoom.',
   room: 'Drag across the plan to draw a room. New rooms take the last class you picked.',
-  detect: 'Tap inside a room. The outline follows the walls around that spot.',
+  detect: 'Tap inside a room to outline it. Drag the gold handles to adjust the last one.',
   sensor: 'Tap to drop a priority sensor. Drag any sensor to move it.',
   scale: 'Drag along a wall or dimension you know, then enter its real length.',
 };
@@ -1247,8 +1242,6 @@ function openDemo() {
 
 /* ---------- theme & boot ---------- */
 readTokens();
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readTokens(); req(); });
-new MutationObserver(() => { readTokens(); req(); }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(req);
 setTool('select');
 openDemo();
