@@ -55,6 +55,16 @@ and deleting the Home Screen icon deletes its data.
 3. Upload to the host.
 4. The next time the iPad opens the app while online, an "A new version is ready" bar appears. Tap **Update now**.
 
+## Client report (PDF)
+
+Floor panel (tap empty space on the plan) → **Client report (PDF)**. Each floor gets:
+- **Page 1:** the plan with every sensor as a plain red dot, class-colored rooms, and a legend (company logo at the top). The legend is placed in empty space on the plan when there is room, otherwise beside it.
+- **Page 2:** totals, rooms, floor area, plan scale, the by-class table, and **Meeting Notes**. Long notes continue on extra pages.
+
+**Report, all floors** puts every floor in one PDF. **Plan page (PNG)** saves page 1 as an image.
+Meeting notes are typed in the floor panel, one item per line, and saved with that floor.
+Company name and logo are set once in Settings → Report branding, and are kept on the iPad for all projects.
+
 ## How sensors are counted
 
 - Grid spacing = √(coverage sq ft). Cig/THC and Vape each have their own coverage, set in Settings.
@@ -77,6 +87,7 @@ and deleting the Home Screen icon deletes its data.
                              dim: { l, w } | null,          // feet, typed by hand; overrides scale
                              auto: true|false } ],
                 sensors: [ { id, x, y, roomId|null, note, detached } ],
+                notesTitle, notes,                          // meeting notes; one item per line
                 image: { type, base64 } } ]
 }
 ```

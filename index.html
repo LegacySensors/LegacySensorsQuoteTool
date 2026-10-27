@@ -85,6 +85,8 @@ button{cursor:pointer;touch-action:manipulation}
 .insp p{margin:0;color:var(--ink2);font-size:14px}
 .sec{display:flex;flex-direction:column;gap:8px}
 .field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field textarea{width:100%;min-width:0;border:1px solid var(--line);background:var(--raise);border-radius:8px;padding:9px 10px;font:inherit;font-size:16px;line-height:1.45;resize:vertical;min-height:110px}
+.logo-prev{display:block;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:90px;max-width:100%;object-fit:contain}
 .field input[type=text],.field input[type=number],.field select,.sheet input[type=text],.sheet input[type=number],.sheet select{width:100%;min-width:0;border:1px solid var(--line);background:var(--raise);border-radius:8px;padding:9px 10px;font-size:16px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -287,6 +289,9 @@ class LocalStore {
   async imageUrl(ref) { if (this.urls.has(ref)) return this.urls.get(ref); const b = await this.tx('images', 'readonly', s => s.get(ref)); if (!b) return null; const u = URL.createObjectURL(b); this.urls.set(ref, u); return u; }
   async deleteImage(ref) { await this.tx('images', 'readwrite', s => s.delete(ref)); }
   async getImageBlob(ref) { return (await this.tx('images', 'readonly', s => s.get(ref))) || null; }
+  async getMeta(k) { const v = await this.tx('images', 'readonly', s => s.get('meta:' + k)); return v === undefined ? null : v; }
+  async setMeta(k, v) { await this.tx('images', 'readwrite', s => s.put(v, 'meta:' + k)); }
+  async delMeta(k) { await this.tx('images', 'readwrite', s => s.delete('meta:' + k)); }
 }
 class MemoryStore {
   constructor() { this.kind = 'memory'; this.p = new Map(); this.f = new Map(); this.i = new Map(); this.b = new Map(); }
@@ -299,6 +304,9 @@ class MemoryStore {
   async deleteProject(pid) { for (const k of [...this.f.keys()]) if (k.startsWith(pid + '/')) this.f.delete(k); this.p.delete(pid); }
   async putImage(blob) { const id = uid(); this.i.set(id, URL.createObjectURL(blob)); this.b.set(id, blob); return id; }
   async getImageBlob(ref) { return this.b.get(ref) || null; }
+  async getMeta(k) { return this.b.has('meta:' + k) ? this.b.get('meta:' + k) : null; }
+  async setMeta(k, v) { this.b.set('meta:' + k, v); }
+  async delMeta(k) { this.b.delete('meta:' + k); }
   async imageUrl(ref) { return this.i.get(ref) || null; }
   async deleteImage() {}
 }
@@ -314,7 +322,7 @@ const S = {
   store: null, projects: [], P: null, floors: [], fid: null, demo: false,
   tool: 'select', sel: null, view: {x: 0, y: 0, k: 1}, fitK: 1,
   imgs: new Map(), ana: new Map(), hist: new Map(),
-  showCells: LS.get('cells', true), lastCls: null,
+  showCells: LS.get('cells', true), lastCls: null, brand: {company: 'Legacy Sensors', logo: null}, pendingFile: null,
   detect: LS.get('detect', {thr: 150, gap: 6}),
   pendingScale: null, dirtyFloors: new Set(), dirtyProject: false, saveT: 0,
   armed: null,
@@ -850,7 +858,12 @@ function summaryPanel(F) {
       <div class="stat"><span>Vape · ${fmtInt(p.settings.vapeCov)} sq ft</span><span class="num">${spacing('vape').toFixed(1)} ft grid</span></div>
       ${isPh ? '<p class="note">These ranges are stand-ins. Enter the sensor’s rated coverage in Settings before quoting.</p>' : ''}
       ${st.generalSqft ? `<p class="note">For comparison: pooling this floor’s ${fmtInt(st.generalSqft)} sq ft of Cig / THC area would give ${pooled} sensors. Totals use the per-room grid.</p>` : ''}</div>
-    <div class="sec"><span class="k">Export</span><div class="btns"><button class="btn" data-act="csv">Room list (CSV)</button><button class="btn" data-act="png">Marked-up plan (PNG)</button></div></div>
+    <div class="sec"><span class="k">Meeting notes <span class="tag neutral">In report</span></span>
+      <div class="field"><label class="k" for="notesTitle">Heading</label><input type="text" id="notesTitle" data-f="notesTitle" value="${esc(F.notesTitle || 'Open items for confirmation')}" autocomplete="off"></div>
+      <div class="field"><label class="k" for="notes">Notes for ${esc(F.name)} · one item per line</label><textarea id="notes" data-f="notes" rows="5" placeholder="e.g. Confirm whether the principal’s office needs its own sensor.">${esc(F.notes || '')}</textarea></div></div>
+    <div class="sec"><span class="k">Export</span>
+      <div class="btns"><button class="btn primary" data-act="report">Client report (PDF)</button>${S.floors.length > 1 ? '<button class="btn" data-act="reportAll">Report, all floors</button>' : ''}</div>
+      <div class="btns"><button class="btn" data-act="csv">Room list (CSV)</button><button class="btn" data-act="png">Plan page (PNG)</button></div></div>
     <p class="note">Glyphs: <b>S</b> auto Cig/THC · <b>V</b> auto vape · <b>P</b> priority · <b>M</b> hand-placed layout.</p>`;
 }
 
@@ -879,6 +892,8 @@ insp.addEventListener('click', e => {
     }
     case 'csv': exportCSV(); break;
     case 'png': exportPNG(); break;
+    case 'report': exportReport(false); break;
+    case 'reportAll': exportReport(true); break;
   }
 });
 insp.addEventListener('change', e => {
@@ -894,7 +909,9 @@ insp.addEventListener('change', e => {
   if (f === 'note' && s?.type === 'sensor') { const x = F.sensors.find(y => y.id === s.id); if (x && x.note !== t.value) mutate(() => { x.note = t.value.trim(); }); }
 });
 insp.addEventListener('input', e => {
-  const t = e.target, f = t.dataset.f; if (f !== 'thr' && f !== 'gap') return;
+  const t = e.target, f = t.dataset.f;
+  if (f === 'notes' || f === 'notesTitle') { const F = curFloor(); if (!F) return; F[f] = t.value; S.dirtyFloors.add(F.id); S.dirtyProject = true; scheduleSave(); return; }
+  if (f !== 'thr' && f !== 'gap') return;
   S.detect[f] = +t.value; LS.set('detect', S.detect); t.previousElementSibling.querySelector('.num').textContent = t.value;
 });
 insp.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'scaleLen') { e.preventDefault(); insp.querySelector('[data-act="setScale"]').click(); } else if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur(); });
@@ -1014,14 +1031,23 @@ function openSettings() {
       <div class="row2"><div class="field"><label class="k" for="stCig">Cig / THC</label><input type="number" id="stCig" min="1" step="1" value="${st.cigCov}"></div>
       <div class="field"><label class="k" for="stVape">Vape</label><input type="number" id="stVape" min="1" step="1" value="${st.vapeCov}"></div></div>
       <p class="note">Grid spacing is the square root of coverage. Each sensor gets a square cell, and each room gets ROUNDUP(L ÷ spacing) × ROUNDUP(W ÷ spacing) sensors. The defaults (1,000 and 500) are placeholders, not a spec.</p></div>
+    <div class="sec"><span class="k">Report branding · all projects</span>
+      <div class="field"><label class="k" for="stCompany">Company name in report header</label><input type="text" id="stCompany" value="${esc(S.brand.company || '')}" autocomplete="off"></div>
+      <img class="logo-prev" id="stLogoPrev" alt="Logo preview" ${S.brand.logo ? `src="${S.brand.logo.src}"` : 'hidden'}>
+      <div class="btns"><label class="btn" for="stLogoFile">Choose logo image</label><button class="btn" data-act="clearLogo">Remove logo</button></div>
+      <input type="file" id="stLogoFile" accept="image/*" hidden>
+      <p class="note">The logo appears at the top of the legend on the plan page. A PNG with a transparent or white background works best; blank margins are trimmed automatically.</p></div>
     <div class="sec"><span class="k">Room classes</span>${rows}<button class="btn" data-act="addCls">Add class</button>
       <p class="note">Vape classes use the vape spacing; Cig / THC classes use the wider one. Removing a class moves its rooms to Other.</p></div>
     <div class="btns"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveSettings">Save settings</button></div>`);
-  S.sheetState = {classes: clone(p.classes)};
+  S.sheetState = {classes: clone(p.classes), logo: undefined};
 }
 card.addEventListener('click', async e => {
   const b = e.target.closest('[data-act]'); if (!b) return; const act = b.dataset.act;
   if (act === 'close') return closeSheet();
+  if (act === 'shareFile') { const f = S.pendingFile; if (!f) return closeSheet();
+    try { await navigator.share({files: [f], title: f.name}); closeSheet(); } catch (err) { if (!err || err.name !== 'AbortError') { downloadBlob(f, f.name); closeSheet(); } } return; }
+  if (act === 'clearLogo') { S.sheetState.logo = null; const pv = $('#stLogoPrev'); pv.hidden = true; pv.removeAttribute('src'); return; }
   if (act === 'demo') { closeSheet(); return openDemo(); }
   if (act === 'createP') {
     const name = $('#npName').value.trim(); if (!name) return toast('Give the building a name.');
@@ -1056,6 +1082,10 @@ card.addEventListener('click', async e => {
     const ids = new Set(S.sheetState.classes.map(c => c.id)); p.classes = S.sheetState.classes;
     if (!ids.has('other')) p.classes.push(DEFAULT_CLASSES.find(c => c.id === 'other'));
     for (const F of S.floors) { let hit = false; for (const r of F.rooms) if (!ids.has(r.cls)) { r.cls = 'other'; hit = true; } if (hit) S.dirtyFloors.add(F.id); }
+    const company = $('#stCompany').value.trim(), logo = S.sheetState.logo;
+    S.brand.company = company; try { await S.store.setMeta('company', company); } catch {}
+    if (logo instanceof Blob) { try { await S.store.setMeta('logo', logo); S.brand.logo = await blobToImage(logo); } catch { toast('Couldn’t save the logo.'); } }
+    else if (logo === null) { S.brand.logo = null; try { await S.store.delMeta('logo'); } catch {} }
     closeSheet(); changed({projectOnly: true}); return;
   }
 });
@@ -1064,6 +1094,9 @@ function rerenderClasses() { card.querySelectorAll('.cls-row').forEach(r => r.re
 card.addEventListener('change', async e => {
   if (e.target.id === 'flFile') { const f = e.target.files[0]; if (f) await loadPlanFile(f, 1); }
   if (e.target.id === 'restoreFile') { const f = e.target.files[0]; if (f) await restoreBackup(f); }
+  if (e.target.id === 'stLogoFile') { const f = e.target.files[0]; if (!f) return;
+    try { const b = await normalizeLogo(f); S.sheetState.logo = b; const pv = $('#stLogoPrev'); pv.src = URL.createObjectURL(b); pv.hidden = false; }
+    catch { toast('That image couldn’t be read. Try a PNG or JPG.'); } }
   if (e.target.id === 'flPage') { const st = S.sheetState; if (st && st.file) await loadPlanFile(st.file, +e.target.value); }
 });
 
@@ -1117,16 +1150,22 @@ $('#setBtn').addEventListener('click', () => S.P && openSettings());
 $('#startBtn').addEventListener('click', openProjects);
 
 /* ---------- exports ---------- */
-const MIME = {csv: 'text/csv', png: 'image/png', json: 'application/json'};
+const MIME = {csv: 'text/csv', png: 'image/png', json: 'application/json', pdf: 'application/pdf'};
 async function saveFile(name, data) {
   const type = MIME[name.split('.').pop()] || 'application/octet-stream';
-  const blob = data instanceof Blob ? data : new Blob([data], {type});
-  try {
-    const file = new File([blob], name, {type});
-    if (navigator.canShare && navigator.canShare({files: [file]})) { await navigator.share({files: [file], title: name}); return; }
-  } catch (e) { if (e && e.name === 'AbortError') return; }
-  const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name;
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 8000);
+  const blob = data instanceof Blob ? data : new Blob([data], {type}), file = new File([blob], name, {type});
+  if (navigator.canShare && navigator.canShare({files: [file]})) {
+    try { await navigator.share({files: [file], title: name}); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; if (e && e.name === 'NotAllowedError') return offerFile(file); }
+  }
+  downloadBlob(blob, name);
+}
+function downloadBlob(blob, name) { const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 8000); }
+// iPadOS only opens the share sheet straight after a tap; long jobs (reports, backups) finish too late, so ask for one more tap.
+function offerFile(file) {
+  S.pendingFile = file;
+  openSheet(`<div class="sheet-head"><h2>File ready</h2>${closeBtn}</div><p>${esc(file.name)} · ${(file.size / 1048576).toFixed(1)} MB</p>
+    <div class="btns"><button class="btn primary" data-act="shareFile">Save or share</button></div>`);
 }
 const slug = s => String(s).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
 function buildCSV() {
@@ -1147,16 +1186,305 @@ function buildCSV() {
   return rows.map(r => r.map(q).join(',')).join('\r\n');
 }
 function exportCSV() { saveFile(`${slug(S.P.name)}-sensors.csv`, buildCSV()); }
+/* ---------- client report (PDF) ----------
+   Layout follows the sample report: US Letter landscape, navy header with gold rule,
+   page 1 = plan with uniform sensor dots + legend, page 2 = summary cards, class table, meeting notes.
+   All positions are in "sample units" (the sample rendered 1650 px wide); u converts to canvas px. */
+const RPT = {W: 2200, H: 1700, navy: '#1b2333', gold: '#c9a227', cream: '#f7f5ee', muted: '#6b7280', line: '#dcdcd7', red: '#c8321f', text: '#23272f'};
+const RF = '"Helvetica Neue",Helvetica,Arial,sans-serif', RMONO = 'ui-monospace,"SF Mono",Menlo,monospace';
+const NOTE = {font: 19.5, lineH: 29, gap: 13, top: 80, bottom: 44, textX: 142, textW: 1400};
+function rFont(c, px, w = 400, fam = RF) { c.font = `${w} ${px}px ${fam}`; }
+function setLS(c, v) { try { if ('letterSpacing' in c) c.letterSpacing = v + 'px'; } catch {} }
+function fitFont(c, text, maxW, px, w = 400, fam = RF) { let s = px; rFont(c, s, w, fam); while (s > 8 && c.measureText(text).width > maxW) { s -= 1; rFont(c, s, w, fam); } return s; }
+function wrapText(c, text, maxW) {
+  const words = String(text).split(/\s+/).filter(Boolean), lines = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (!cur || c.measureText(t).width <= maxW) cur = t; else { lines.push(cur); cur = w; } }
+  if (cur) lines.push(cur); return lines.length ? lines : [''];
+}
+function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+const fmtLongDate = d => d.toLocaleDateString('en-US', {month: 'long', day: 'numeric', year: 'numeric'});
+const interArea = (a, b) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+function allSensorPts(F) {
+  const pts = [];
+  for (const r of F.rooms) { if (!r.auto) continue; const g = grid(r, F); if (g.count) pts.push(...autoPts(r, g)); }
+  for (const s of F.sensors) pts.push({x: s.x, y: s.y});
+  return pts;
+}
+function noteItems(t) { return String(t || '').split(/\r?\n/).map(s => s.replace(/^\s*([-*•]|\d+[.)])\s+/, '').trim()).filter(Boolean); }
+
+function rHeader(c, u, title, sub, date) {
+  c.fillStyle = RPT.navy; c.fillRect(0, 0, RPT.W, 128 * u); c.fillStyle = RPT.gold; c.fillRect(0, 128 * u, RPT.W, 6 * u);
+  const right = 1575 * u, comp = (S.brand.company || '').toUpperCase();
+  c.textBaseline = 'alphabetic'; c.textAlign = 'right';
+  let cw = 0;
+  if (comp) { rFont(c, 21 * u, 700); setLS(c, 1 * u); cw = c.measureText(comp).width; c.fillStyle = RPT.gold; c.fillText(comp, right, 75 * u); setLS(c, 0); }
+  rFont(c, 17 * u); c.fillStyle = '#d5d9e0'; c.fillText(date, right, 108 * u);
+  c.textAlign = 'left';
+  const maxT = right - 75 * u - Math.max(cw, 230 * u) - 40 * u;
+  fitFont(c, title, maxT, 42 * u, 700); c.fillStyle = '#ffffff'; c.fillText(title, 75 * u, 75 * u);
+  fitFont(c, sub, maxT, 20 * u); c.fillStyle = '#c3c8d2'; c.fillText(sub, 75 * u, 108 * u);
+}
+function rFooter(c, u, left, pageNo, total) {
+  c.fillStyle = '#e3e3df'; c.fillRect(75 * u, 1211 * u, 1500 * u, 1.5 * u);
+  rFont(c, 16 * u); c.fillStyle = RPT.muted; c.textBaseline = 'alphabetic';
+  c.textAlign = 'left'; c.fillText(left, 75 * u, 1238 * u);
+  if (total) { c.textAlign = 'right'; c.fillText(`Page ${pageNo} of ${total}`, 1575 * u, 1238 * u); }
+  c.textAlign = 'left';
+}
+
+/* page 1: plan */
+const fitRect = (A, w, h) => { const k = Math.min(A.w / w, A.h / h); return {x: A.x + (A.w - w * k) / 2, y: A.y + (A.h - h * k) / 2, w: w * k, h: h * k, k}; };
+function legendMetrics(u, n) {
+  const lh = S.brand.logo ? 70 * u : 0;
+  return {w: 430 * u, h: 24 * u + (lh ? lh + 18 * u : 0) + 44 * u + n * 54 * u + 12 * u, lh};
+}
+function inkFraction(A, R, PR) {
+  let dark = 0, n = 0; const step = Math.max(R.w, R.h) / 60;
+  for (let y = R.y; y < R.y + R.h; y += step) for (let x = R.x; x < R.x + R.w; x += step) {
+    n++; const ix = (x - PR.x) / PR.k * A.a, iy = (y - PR.y) / PR.k * A.a;
+    if (ix < 0 || iy < 0 || ix >= A.w || iy >= A.h) continue;
+    if (A.lum[(iy | 0) * A.w + (ix | 0)] < 170) dark++;
+  }
+  return n ? dark / n : 0;
+}
+// Try to tuck the legend into empty space on the plan; null means "no clean spot", so it goes beside the plan instead.
+function legendSpot(F, PR, FR, L, u) {
+  const m = 16 * u; if (L.h > FR.h - 2 * m) return null;
+  const xs = [FR.x + m, FR.x + (FR.w - L.w) / 2, FR.x + FR.w - m - L.w], ys = [FR.y + m, FR.y + (FR.h - L.h) / 2, FR.y + FR.h - m - L.h];
+  const A = analysisFor(F), pts = allSensorPts(F), k = PR.k, dotR = 18 * u; let best = null;
+  for (const x of xs) for (const y of ys) {
+    if (x === xs[1] && y === ys[1]) continue;
+    const R = {x, y, w: L.w, h: L.h}, gap = 14 * u, RG = {x: x - gap, y: y - gap, w: L.w + 2 * gap, h: L.h + 2 * gap}; let score = 0;
+    for (const r of F.rooms) score += interArea(RG, {x: PR.x + r.x * k, y: PR.y + r.y * k, w: r.w * k, h: r.h * k});
+    score /= L.w * L.h;
+    for (const p of pts) { const px = PR.x + p.x * k, py = PR.y + p.y * k; if (px > R.x - dotR && px < R.x + R.w + dotR && py > R.y - dotR && py < R.y + R.h + dotR) score += 1; }
+    if (A) score += 2 * inkFraction(A, R, PR);
+    if (!best || score < best.score) best = {x, y, score};
+  }
+  return best && best.score < 0.12 ? best : null;
+}
+function haloR(c, text, x, y, u, color) { c.lineJoin = 'round'; c.lineWidth = 4 * u; c.strokeStyle = 'rgba(255,255,255,.92)'; c.strokeText(text, x, y); c.fillStyle = color; c.fillText(text, x, y); }
+function drawReportPlan(c, F, PR, u) {
+  const img = S.imgs.get(F.id), k = PR.k, Q = r => ({x: PR.x + r.x * k, y: PR.y + r.y * k, w: r.w * k, h: r.h * k});
+  c.fillStyle = '#ffffff'; c.fillRect(PR.x, PR.y, PR.w, PR.h);
+  if (img) { c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(img, PR.x, PR.y, PR.w, PR.h); }
+  for (const r of F.rooms) { const cl = clsOf(r.cls), q = Q(r); c.fillStyle = hexA(cl.color, .2); c.fillRect(q.x, q.y, q.w, q.h); c.strokeStyle = cl.color; c.lineWidth = 2.5 * u; c.setLineDash([]); c.strokeRect(q.x, q.y, q.w, q.h); }
+  c.textAlign = 'left'; c.textBaseline = 'top';
+  for (const r of F.rooms) {
+    const q = Q(r); if (q.w < 100 * u || q.h < 44 * u) continue; const d = dims(r, F);
+    c.save(); c.beginPath(); c.rect(q.x, q.y, q.w, q.h); c.clip();
+    rFont(c, 15 * u, 700); haloR(c, r.name, q.x + 7 * u, q.y + 6 * u, u, '#15191b');
+    if (d && q.h > 64 * u) { rFont(c, 12.5 * u, 500, RMONO); haloR(c, `${fmtFt(d.l)} × ${fmtFt(d.w)}`, q.x + 7 * u, q.y + 26 * u, u, '#3a4448'); }
+    c.restore();
+  }
+  const R = 16 * u;   // every sensor drawn the same: plain red dot, no letters
+  for (const p of allSensorPts(F)) {
+    const x = PR.x + p.x * k, y = PR.y + p.y * k;
+    c.beginPath(); c.arc(x, y, R, 0, Math.PI * 2); c.fillStyle = RPT.red; c.fill();
+    c.lineWidth = 1.6 * u; c.strokeStyle = 'rgba(255,255,255,.9)'; c.stroke();
+  }
+  c.textBaseline = 'alphabetic';
+}
+function drawLegend(c, u, pos, L, classes) {
+  const {x, y} = pos;
+  c.fillStyle = '#ffffff'; c.fillRect(x, y, L.w, L.h); c.strokeStyle = '#111111'; c.lineWidth = 2.5 * u; c.strokeRect(x, y, L.w, L.h);
+  let cy = y + 24 * u; const logo = S.brand.logo;
+  if (logo) { const s = Math.min(L.lh / logo.naturalHeight, (L.w - 48 * u) / logo.naturalWidth); c.drawImage(logo, x + 24 * u, cy, logo.naturalWidth * s, logo.naturalHeight * s); cy += L.lh + 18 * u; }
+  c.textAlign = 'left'; c.textBaseline = 'middle';
+  rFont(c, 22 * u, 500); setLS(c, 1 * u); c.fillStyle = '#111111'; c.fillText('LEGEND', x + 24 * u, cy + 16 * u); setLS(c, 0); cy += 44 * u;
+  const items = [...classes.map(cl => ({name: cl.name, color: cl.color})), {name: 'Sensor', sensor: true}];
+  for (const it of items) {
+    const cx = x + 46 * u, my = cy + 27 * u;
+    c.beginPath(); c.arc(cx, my, 20 * u, 0, Math.PI * 2);
+    if (it.sensor) { c.fillStyle = RPT.red; c.fill(); }
+    else { c.fillStyle = hexA(it.color, .25); c.fill(); c.lineWidth = 3 * u; c.strokeStyle = it.color; c.stroke(); }
+    fitFont(c, it.name, L.w - 108 * u, 23 * u); c.fillStyle = '#111111'; c.fillText(it.name, x + 84 * u, my);
+    cy += 54 * u;
+  }
+  c.textBaseline = 'alphabetic';
+}
+function rPlanPage(c, u, F) {
+  const FR = {x: 67 * u, y: 188 * u, w: 1516 * u, h: 982 * u}, pad = 14 * u;
+  c.fillStyle = '#fbfbf9'; c.fillRect(FR.x, FR.y, FR.w, FR.h); c.strokeStyle = RPT.line; c.lineWidth = 1.5 * u; c.strokeRect(FR.x, FR.y, FR.w, FR.h);
+  const classes = S.P.classes.filter(cl => F.rooms.some(r => r.cls === cl.id)), L = legendMetrics(u, classes.length + 1);
+  let PA = {x: FR.x + pad, y: FR.y + pad, w: FR.w - 2 * pad, h: FR.h - 2 * pad}, PR = fitRect(PA, F.imgW, F.imgH);
+  let pos = legendSpot(F, PR, FR, L, u);
+  if (!pos) { PA = {...PA, w: PA.w - L.w - 18 * u}; PR = fitRect(PA, F.imgW, F.imgH); pos = {x: FR.x + FR.w - pad - L.w, y: FR.y + pad}; }
+  drawReportPlan(c, F, PR, u);
+  drawLegend(c, u, pos, L, classes);
+}
+
+/* page 2: summary */
+function summaryRows(st) {
+  const rows = S.P.classes.map(cl => ({name: cl.name, color: cl.color, ...st.by.get(cl.id)})).filter(r => r.rooms);
+  if (st.unassigned) rows.push({name: 'Priority sensors outside rooms', color: RPT.red, rooms: null, sqft: null, sensors: st.unassigned});
+  return rows;
+}
+function drawCards(c, u, F, st, all) {
+  const vals = [...st.by.values()], area = vals.reduce((a, b) => a + b.sqft, 0), ncls = vals.filter(b => b.rooms).length;
+  const cards = [['Total sensors', fmtInt(st.total), `${F.name} (all floors: ${fmtInt(all)})`],
+    ['Rooms', fmtInt(F.rooms.length), `Across ${ncls} room class${ncls === 1 ? '' : 'es'}`],
+    ['Floor area', fmtInt(area), 'square feet'],
+    ['Plan scale', F.pxPerFt ? F.pxPerFt.toFixed(2) : '—', F.pxPerFt ? 'px per ft' : 'not set']];
+  c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  cards.forEach(([k, v, sub], i) => {
+    const x = (75 + i * 382.33) * u, y = 185 * u, w = 353 * u, h = 155 * u;
+    c.fillStyle = RPT.cream; rrect(c, x, y, w, h, 10 * u); c.fill(); c.fillStyle = RPT.gold; c.fillRect(x, y, 8 * u, h);
+    rFont(c, 15 * u, 700); setLS(c, .6 * u); c.fillStyle = RPT.muted; c.fillText(k.toUpperCase(), x + 33 * u, y + 37 * u); setLS(c, 0);
+    fitFont(c, v, w - 60 * u, 52 * u, 700); c.fillStyle = RPT.navy; c.fillText(v, x + 33 * u, y + 108 * u);
+    fitFont(c, sub, w - 60 * u, 17 * u); c.fillStyle = RPT.muted; c.fillText(sub, x + 33 * u, y + 135 * u);
+  });
+}
+function drawTable(c, u, rows, rowH, F, st) {
+  const col = (t, x, y, right) => { c.textAlign = right ? 'right' : 'left'; c.fillText(t, x * u, y); };
+  c.textBaseline = 'alphabetic';
+  rFont(c, 24 * u, 700); c.fillStyle = RPT.navy; col('Sensors by Room Class', 75, 410 * u);
+  c.fillStyle = RPT.navy; c.fillRect(75 * u, 423 * u, 1500 * u, 49 * u);
+  rFont(c, 15.5 * u, 700); setLS(c, .5 * u); c.fillStyle = '#ffffff';
+  col('CLASS', 104, 454 * u); col('ROOMS', 908, 454 * u, 1); col('SQ FT', 1241, 454 * u, 1); col('SENSORS', 1545, 454 * u, 1); setLS(c, 0);
+  let y = 475;
+  rows.forEach((r, i) => {
+    c.fillStyle = i % 2 ? '#ffffff' : '#fafafa'; c.fillRect(75 * u, y * u, 1500 * u, rowH * u);
+    const mid = (y + rowH / 2) * u;
+    c.fillStyle = r.color; rrect(c, 104 * u, mid - 9 * u, 18 * u, 18 * u, 3 * u); c.fill();
+    rFont(c, 21 * u); c.fillStyle = RPT.text; col(r.name, 140, mid + 7 * u);
+    col(r.rooms == null ? '–' : fmtInt(r.rooms), 908, mid + 7 * u, 1); col(r.sqft == null ? '–' : fmtInt(r.sqft), 1241, mid + 7 * u, 1);
+    rFont(c, 21 * u, 700); col(fmtInt(r.sensors), 1545, mid + 7 * u, 1);
+    y += rowH;
+  });
+  c.fillStyle = RPT.navy; c.fillRect(75 * u, y * u, 1500 * u, 1.5 * u);
+  c.fillStyle = RPT.cream; c.fillRect(75 * u, (y + 1.5) * u, 1500 * u, (rowH - 1.5) * u);
+  const mid = (y + rowH / 2) * u, area = [...st.by.values()].reduce((a, b) => a + b.sqft, 0);
+  rFont(c, 22 * u, 700); c.fillStyle = RPT.navy;
+  col('Total — this floor', 104, mid + 8 * u); col(fmtInt(F.rooms.length), 908, mid + 8 * u, 1); col(fmtInt(area), 1241, mid + 8 * u, 1); col(fmtInt(st.total), 1545, mid + 8 * u, 1);
+  c.textAlign = 'left';
+}
+function notesBoxH(items) {   // in sample units
+  if (!items.length) return NOTE.top + NOTE.bottom;
+  const lines = items.reduce((n, it) => n + it.length, 0);
+  return NOTE.top + (lines - 1) * NOTE.lineH + (items.length - 1) * NOTE.gap + NOTE.bottom;
+}
+function drawNotesBox(c, u, top, title, items) {
+  const h = notesBoxH(items) * u, T = top * u;
+  c.fillStyle = RPT.cream; rrect(c, 75 * u, T, 1500 * u, h, 10 * u); c.fill(); c.fillStyle = RPT.gold; c.fillRect(75 * u, T, 8 * u, h);
+  c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  rFont(c, 15 * u, 700); setLS(c, .6 * u); c.fillStyle = RPT.muted; c.fillText(title.toUpperCase(), 113 * u, T + 37 * u); setLS(c, 0);
+  rFont(c, NOTE.font * u);
+  if (!items.length) { c.fillStyle = RPT.muted; c.fillText('No meeting notes recorded.', 113 * u, T + NOTE.top * u); return; }
+  let y = T + NOTE.top * u;
+  for (const lines of items) {
+    c.fillStyle = RPT.gold; c.beginPath(); c.arc(121 * u, y - 7 * u, 4.5 * u, 0, Math.PI * 2); c.fill();
+    c.fillStyle = RPT.text;
+    lines.forEach((ln, i) => { c.fillText(ln, NOTE.textX * u, y); if (i < lines.length - 1) y += NOTE.lineH * u; });
+    y += (NOTE.lineH + NOTE.gap) * u;
+  }
+}
+async function floorReportPages(F) {
+  await loadImage(F);
+  const p = S.P, st = floorStats(F), all = projectTotal(), date = fmtLongDate(new Date()), u = RPT.W / 1650;
+  const left = `${p.name} · ${F.name} · Sensor Placement Report`;
+  const pages = [{left, draw: c => { rHeader(c, u, `${p.name} — ${F.name} Sensor Placement`, `Floor plan with planned sensor locations · ${st.total} sensor${st.total === 1 ? '' : 's'}`, date); rPlanPage(c, u, F); }}];
+  const m = document.createElement('canvas').getContext('2d'); rFont(m, NOTE.font * u);
+  const items = noteItems(F.notes).map(t => wrapText(m, t, NOTE.textW * u));
+  const title = (F.notesTitle && F.notesTitle.trim()) || 'Open items for confirmation';
+  const rows = summaryRows(st), LIMIT = 1180, fits = (top, list) => top + notesBoxH(list) <= LIMIT;
+  // Tighten table rows (54 → 40) if that keeps every note on the summary page; otherwise keep full rows and continue notes on later pages.
+  let rowH = Math.max(34, Math.min(54, 600 / (rows.length + 1)));
+  for (let h = rowH; h >= 40; h -= 2) if (fits(475 + (rows.length + 1) * h + 98, items)) { rowH = h; break; }
+  const tableEnd = 475 + (rows.length + 1) * rowH;
+  let notesTop = tableEnd + 98; const first = [], rest = items.slice();
+  if (fits(notesTop, [])) { while (rest.length && fits(notesTop, [...first, rest[0]])) first.push(rest.shift()); }
+  if (!fits(notesTop, []) || (!first.length && rest.length)) notesTop = null;
+  const summaryTitle = `${p.name} — ${F.name} Sensor Summary`;
+  pages.push({left, draw: c => {
+    rHeader(c, u, summaryTitle, 'Coverage breakdown by room class', date);
+    drawCards(c, u, F, st, all); drawTable(c, u, rows, rowH, F, st);
+    if (notesTop != null) { rFont(c, 24 * u, 700); c.fillStyle = RPT.navy; c.textAlign = 'left'; c.fillText('Meeting Notes', 75 * u, (tableEnd + 66) * u); drawNotesBox(c, u, notesTop, title, first); }
+  }});
+  while (rest.length) {
+    const chunk = [], top = 240;
+    while (rest.length && (!chunk.length || fits(top, [...chunk, rest[0]]))) chunk.push(rest.shift());
+    pages.push({left, draw: c => {
+      rHeader(c, u, summaryTitle, 'Meeting notes, continued', date);
+      rFont(c, 24 * u, 700); c.fillStyle = RPT.navy; c.textAlign = 'left'; c.fillText('Meeting Notes', 75 * u, 208 * u);
+      drawNotesBox(c, u, top, title, chunk);
+    }});
+  }
+  return pages;
+}
+
+/* PDF writer: each page is a full-bleed JPEG, so no PDF library is needed offline */
+function pdfText(s) {
+  let hex = 'FEFF';
+  for (const ch of String(s)) { const cp = ch.codePointAt(0);
+    if (cp > 0xffff) { const v = cp - 0x10000; hex += (0xD800 + (v >> 10)).toString(16).padStart(4, '0') + (0xDC00 + (v & 0x3ff)).toString(16).padStart(4, '0'); }
+    else hex += cp.toString(16).padStart(4, '0'); }
+  return '<' + hex.toUpperCase() + '>';
+}
+function buildPDF(pages, info) {
+  const enc = new TextEncoder(), chunks = [], offs = []; let len = 0;
+  const put = d => { const b = typeof d === 'string' ? enc.encode(d) : d; chunks.push(b); len += b.length; };
+  const begin = id => { offs[id] = len; put(`${id} 0 obj\n`); };
+  const n = pages.length, total = 3 + n * 3, kids = pages.map((_, i) => `${4 + i * 3} 0 R`).join(' ');
+  put('%PDF-1.4\n'); put(new Uint8Array([37, 226, 227, 207, 211, 10]));
+  begin(1); put('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  begin(2); put(`<< /Type /Pages /Count ${n} /Kids [${kids}] >>\nendobj\n`);
+  begin(3); put(`<< /Title ${pdfText(info.title)} /Author ${pdfText(info.author)} /Creator (Sensor Layout Planner) /Producer (Sensor Layout Planner) >>\nendobj\n`);
+  pages.forEach((pg, i) => {
+    const pid = 4 + i * 3, cid = pid + 1, iid = pid + 2, content = `q 792 0 0 612 0 0 cm /Im${i} Do Q\n`;
+    begin(pid); put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /XObject << /Im${i} ${iid} 0 R >> /ProcSet [/PDF /ImageC] >> /Contents ${cid} 0 R >>\nendobj\n`);
+    begin(cid); put(`<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n`);
+    begin(iid); put(`<< /Type /XObject /Subtype /Image /Width ${pg.w} /Height ${pg.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.bytes.length} >>\nstream\n`);
+    put(pg.bytes); put('\nendstream\nendobj\n');
+  });
+  const xref = len; let x = `xref\n0 ${total + 1}\n0000000000 65535 f \n`;
+  for (let id = 1; id <= total; id++) x += String(offs[id]).padStart(10, '0') + ' 00000 n \n';
+  put(x); put(`trailer\n<< /Size ${total + 1} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(chunks, {type: 'application/pdf'});
+}
+const canvasBlob = (c, type, q) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('encode')), type, q));
+function pageCanvas() { const c = document.createElement('canvas'); c.width = RPT.W; c.height = RPT.H; return c; }
+function paint(c, page, no, total) { const x = c.getContext('2d'); x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = '#ffffff'; x.fillRect(0, 0, c.width, c.height); page.draw(x); rFooter(x, RPT.W / 1650, page.left, no, total); }
+async function exportReport(all) {
+  const floors = all ? S.floors.slice() : [curFloor()].filter(Boolean); if (!S.P || !floors.length) return;
+  const busy = $('#busy'); busy.textContent = 'Building report…'; busy.hidden = false;
+  try {
+    if (!S.demo) { clearTimeout(S.saveT); await flushSave(); }
+    const pages = []; for (const F of floors) pages.push(...await floorReportPages(F));
+    const c = pageCanvas(), out = [];
+    for (let i = 0; i < pages.length; i++) { paint(c, pages[i], i + 1, pages.length); out.push({w: c.width, h: c.height, bytes: new Uint8Array(await (await canvasBlob(c, 'image/jpeg', .92)).arrayBuffer())}); }
+    const what = all && floors.length > 1 ? 'All Floors' : floors[0].name;
+    const pdf = buildPDF(out, {title: `${S.P.name} – ${what} Sensor Placement`, author: S.brand.company || ''});
+    busy.hidden = true;
+    await saveFile(`${slug(S.P.name)}-${slug(all && floors.length > 1 ? 'all-floors' : floors[0].name)}-sensor-report.pdf`, pdf);
+  } catch (e) { console.error(e); toast('Couldn’t build the report.'); }
+  finally { busy.hidden = true; busy.textContent = 'Working…'; }
+}
 async function exportPNG() {
-  const F = curFloor(); if (!F) return; await loadImage(F);
-  const c = document.createElement('canvas'); c.width = F.imgW; c.height = F.imgH; const x = c.getContext('2d');
-  const px = Math.max(1, F.imgW / 1300);
-  drawScene(x, F, px, {sel: null, live: false});
-  const st = floorStats(F), label = `${S.P.name} · ${F.name} · ${st.total} sensors · ${new Date().toLocaleDateString()}`;
-  x.font = `600 ${15 * px}px "Avenir Next Condensed","Arial Narrow",Arial,sans-serif`; const tw = x.measureText(label).width;
-  x.fillStyle = 'rgba(255,255,255,.94)'; x.fillRect(8 * px, 8 * px, tw + 20 * px, 28 * px); x.strokeStyle = '#1b2124'; x.lineWidth = 1.5 * px; x.strokeRect(8 * px, 8 * px, tw + 20 * px, 28 * px);
-  x.fillStyle = '#1b2124'; x.textBaseline = 'middle'; x.fillText(label, 18 * px, 22 * px);
-  c.toBlob(b => b ? saveFile(`${slug(S.P.name)}-${slug(F.name)}.png`, b) : toast('Couldn’t render the image.'), 'image/png');
+  const F = curFloor(); if (!F) return;
+  const busy = $('#busy'); busy.textContent = 'Rendering…'; busy.hidden = false;
+  try { const [page] = await floorReportPages(F), c = pageCanvas(); paint(c, page, 1, 0); busy.hidden = true; await saveFile(`${slug(S.P.name)}-${slug(F.name)}-plan.png`, await canvasBlob(c, 'image/png')); }
+  catch (e) { console.error(e); toast('Couldn’t render the image.'); }
+  finally { busy.hidden = true; busy.textContent = 'Working…'; }
+}
+
+/* ---------- branding (company name + logo for reports, kept on this device) ---------- */
+const blobToImage = b => new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = URL.createObjectURL(b); });
+async function loadBrand() {
+  try { const c = await S.store.getMeta('company'); if (typeof c === 'string') S.brand.company = c; } catch {}
+  try { const b = await S.store.getMeta('logo'); if (b instanceof Blob) S.brand.logo = await blobToImage(b); } catch {}
+}
+// Re-encode as PNG, trim blank margins, cap the size.
+async function normalizeLogo(file) {
+  const img = await blobToImage(file), sc = Math.min(1, 1400 / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * sc)), h = Math.max(1, Math.round(img.naturalHeight * sc));
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', {willReadFrequently: true}); x.drawImage(img, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data; let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) { const i = (yy * w + xx) * 4; if (d[i + 3] > 16 && (d[i] < 238 || d[i + 1] < 238 || d[i + 2] < 238)) { if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (yy < y0) y0 = yy; if (yy > y1) y1 = yy; } }
+  if (x1 < 0) return canvasBlob(c, 'image/png');
+  const p = Math.round(Math.max(x1 - x0, y1 - y0) * .04), cx = Math.max(0, x0 - p), cy = Math.max(0, y0 - p), cw = Math.min(w, x1 + p + 1) - cx, ch = Math.min(h, y1 + p + 1) - cy;
+  const o = document.createElement('canvas'); o.width = cw; o.height = ch; o.getContext('2d').drawImage(c, cx, cy, cw, ch, 0, 0, cw, ch);
+  return canvasBlob(o, 'image/png');
 }
 
 
@@ -1232,6 +1560,8 @@ function makeDemo() {
     const nm = r[0] === 'BOYS' ? 'Boys restroom' : r[0] === 'GIRLS' ? 'Girls restroom' : r[0] === 'STAFF' ? 'Staff restroom' : r[0].charAt(0) + r[0].slice(1).toLowerCase();
     F.rooms.push({id, name: nm, autoName: false, cls: r[5], x: X(r[1]) + 4, y: Y(r[2]) + 4, w: (r[3] - r[1]) * K - 8, h: (r[4] - r[2]) * K - 8, dim: null, auto: true}); }
   F.sensors.push({id: uid(), x: X(110), y: Y(35), roomId: ids['CORRIDOR'], note: 'Outside restrooms (example)', detached: false});
+  F.notesTitle = 'Open items for confirmation';
+  F.notes = 'Confirm whether the staff restroom needs its own sensor or can share the corridor unit (example).\nGym ceiling height to be verified before the final count (example).\nClassroom 104 not yet included in the quote (example).';
   return {canvas: c, floor: F};
 }
 function openDemo() {
@@ -1247,6 +1577,7 @@ setTool('select');
 openDemo();
 (async () => {
   S.store = await initStore();
+  await loadBrand();
   await refreshProjects();
   if (S.projects.length) {
     const last = LS.get('project', null), pick = S.projects.find(p => p.id === last) || S.projects[0];
