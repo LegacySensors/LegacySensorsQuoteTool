@@ -67,25 +67,37 @@ Company name and logo are set once in Settings → Report branding, and are kept
 
 ## How sensors are counted
 
-- Grid spacing = √(coverage sq ft). Cig/THC and Vape each have their own coverage, set in Settings.
+- Coverage is the **detection distance R** (ft): the farthest the sensor picks up, measured. Cig/THC and Vape each have their own, set in Settings.
+- Each sensor covers a circle of radius R. Sensors sit on a square grid spaced `R × √2` apart, the widest spacing where neighboring circles leave no gaps.
+  Each room gets `ROUNDUP(L ÷ spacing) × ROUNDUP(W ÷ spacing)` sensors. Example: R = 18 ft → spacing 25.5 ft; a 30 × 30 ft room needs 2 × 2, because its corners are 21.2 ft from the center.
 - Each room gets `ROUNDUP(L ÷ spacing) × ROUNDUP(W ÷ spacing)` sensors, using the vape spacing if the room's class is a Vape class.
+- **Wall mounting (optional, per room):** in the room panel, switch Mounting from Ceiling grid to Walls, e.g. for gyms with high ceilings. Ceiling is the default for every room and class.
+  Wall sensors use the same detection reach as ceiling sensors and each covers half the area (a semicircle instead of a circle).
+  Each covers the half circle of radius R facing into the room. They are spaced the same `R × √2` apart, which leaves a gap-free band `R ÷ √2` deep along each wall:
+  sensors per wall = `ROUNDUP(wall length ÷ spacing)`, band depth = `R ÷ √2` (= spacing ÷ 2). Tap a wall in the room panel to skip it (bleachers, glass, doors).
+  Anything farther than the band depth from every used wall is shaded on the plan, listed on the report's summary page, and given in the CSV as "Not covered (sq ft)".
+- **Ceiling height** can be recorded per room (optional). It appears in the room list CSV, not the PDF report.
 - Priority (P) sensors are added on top. Dragging an auto sensor switches that room to hand placement (M).
-- Default coverage values (1,000 / 500 sq ft) are placeholders, not a sensor spec.
+- Default detection distances (18 ft Cig/THC, 12.5 ft Vape) are placeholders, not a sensor spec.
+- Projects saved before 2026-11-12 stored coverage as sq ft (circle area). They convert once on opening: R = √(sq ft ÷ π).
 
 ## Backup file format (for a future native app)
 
 ```
 {
   "format": "sensor-layout-planner-backup", "version": 1,
-  "project": { id, schema: 1, name, siteType,
-               settings: { cigCov, vapeCov },               // sq ft per sensor
+  "project": { id, schema: 3, name, siteType,         // 2: Gym + Cafeteria classes; 3: coverage as distance
+               settings: { cigR, vapeR },                   // detection distance in feet (schema < 3: cigCov/vapeCov sq ft)
                classes: [ { id, name, mode: "vape"|"general"|"none", color } ] },
   "floors": [ { id, name, order, imgW, imgH,
                 pxPerFt,                                    // null until scale is set
                 scaleLine: { a:{x,y}, b:{x,y}, ft } | null,
                 rooms:   [ { id, name, cls, x, y, w, h,      // plan-image pixels
                              dim: { l, w } | null,          // feet, typed by hand; overrides scale
-                             auto: true|false } ],
+                             auto: true|false,
+                             mount: "ceiling"|"wall",       // absent = ceiling
+                             walls: { n, e, s, w },         // booleans; absent = all used (n = top of plan)
+                             height } ],                    // ceiling height in feet, optional
                 sensors: [ { id, x, y, roomId|null, note, detached } ],
                 notesTitle, notes,                          // meeting notes; one item per line
                 image: { type, base64 } } ]

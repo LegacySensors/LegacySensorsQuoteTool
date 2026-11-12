@@ -86,6 +86,14 @@ button{cursor:pointer;touch-action:manipulation}
 .sec{display:flex;flex-direction:column;gap:8px}
 .field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .field textarea{width:100%;min-width:0;border:1px solid var(--line);background:var(--raise);border-radius:8px;padding:9px 10px;font:inherit;font-size:16px;line-height:1.45;resize:vertical;min-height:110px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:var(--raise);padding:10px;font-weight:600;font-size:15px;color:var(--ink2)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.wallpick{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;grid-template-rows:38px 78px 38px;gap:5px;width:100%;max-width:270px;margin:4px auto 0}
+.wallpick button{border:2px dashed var(--line);background:none;border-radius:6px;color:var(--ink2);font-family:var(--f-num);font-size:13px;padding:0}
+.wallpick button[aria-pressed="true"]{border:2px solid var(--accent);background:var(--accent-soft);color:var(--ink)}
+.wallpick .wn{grid-column:2;grid-row:1}.wallpick .ws{grid-column:2;grid-row:3}.wallpick .ww{grid-column:1;grid-row:2}.wallpick .we{grid-column:3;grid-row:2}
+.wallpick .core{grid-column:2;grid-row:2;display:grid;place-items:center;text-align:center;border:1px solid var(--line);border-radius:4px;font-family:var(--f-num);font-size:12px;color:var(--ink2);line-height:1.35}
 .logo-prev{display:block;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:90px;max-width:100%;object-fit:contain}
 .field input[type=text],.field input[type=number],.field select,.sheet input[type=text],.sheet input[type=number],.sheet select{width:100%;min-width:0;border:1px solid var(--line);background:var(--raise);border-radius:8px;padding:9px 10px;font-size:16px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -250,6 +258,8 @@ const DEFAULT_CLASSES = [
   {id:'locker', name:'Locker room', mode:'vape', color:'#2a6fd6'},
   {id:'hallway', name:'Hallway', mode:'general', color:'#7a5cc7'},
   {id:'office', name:'Office', mode:'general', color:'#3c8a3f'},
+  {id:'gym', name:'Gym', mode:'general', color:'#b5562b'},
+  {id:'cafeteria', name:'Cafeteria', mode:'general', color:'#5560c9'},
   {id:'large', name:'Gym / Cafeteria', mode:'general', color:'#c2477d'},
   {id:'guest', name:'Guest room', mode:'vape', color:'#8a6d3b'},
   {id:'none', name:'Stair / Mech', mode:'none', color:'#7d878c'},
@@ -257,11 +267,12 @@ const DEFAULT_CLASSES = [
 ];
 const MODE_LABEL = {general:'Cig / THC', vape:'Vape', none:'No sensors'};
 const SENSOR_RED = '#c4321f', GOLD = '#d4af37', GOLD_DK = '#8a6a0c';
-const PLACEHOLDER = {cigCov:1000, vapeCov:500};
+const PLACEHOLDER = {cigR: 18, vapeR: 12.5};   // detection distance in feet; stand-ins until the measured values are entered
+const ftR = R => `${+(+R).toFixed(1)} ft`;
 
 function newProject(name, siteType) {
-  return {id: uid(), schema: 1, name: name || 'Untitled building', siteType: siteType || 'School',
-    settings: {cigCov: PLACEHOLDER.cigCov, vapeCov: PLACEHOLDER.vapeCov},
+  return {id: uid(), schema: 3, name: name || 'Untitled building', siteType: siteType || 'School',
+    settings: {cigR: PLACEHOLDER.cigR, vapeR: PLACEHOLDER.vapeR},
     classes: clone(DEFAULT_CLASSES), createdAt: Date.now(), updatedAt: Date.now()};
 }
 
@@ -331,32 +342,70 @@ const curFloor = () => S.floors.find(f => f.id === S.fid) || null;
 
 /* ---------- geometry & counting ---------- */
 function clsOf(id) { const p = S.P; return p.classes.find(c => c.id === id) || p.classes.find(c => c.id === 'other') || p.classes[0]; }
-function spacing(mode) { const st = S.P.settings, cov = mode === 'vape' ? st.vapeCov : st.cigCov; return cov > 0 ? Math.sqrt(cov) : 0; }
+// Each sensor detects within a circle of radius R (the measured max distance). On a square grid the widest spacing
+// that leaves no gaps between circles is R·√2, so every room uses that spacing.
+function spacing(mode) { const st = S.P.settings, R = mode === 'vape' ? st.vapeR : st.cigR; return R > 0 ? R * Math.SQRT2 : 0; }
 function dims(room, F) {
   if (room.dim) return {l: room.dim.l, w: room.dim.w, src: 'entered'};
   if (F.pxPerFt) return {l: room.w / F.pxPerFt, w: room.h / F.pxPerFt, src: 'scale'};
   return null;
 }
+const WALLS = ['n', 'e', 's', 'w'], WALL_NAME = {n: 'Top', e: 'Right', s: 'Bottom', w: 'Left'};
+const wallsOn = r => ({n: true, e: true, s: true, w: true, ...(r.walls || {})});
+/* Ceiling: circles of radius R on a square grid, spacing s = R·√2 (each sensor counted for an s × s cell).
+   Walls: same R, half the circle. Spaced s apart along the wall, the semicircles leave no gaps
+   in a band sqrt(R² − (s/2)²) = R/√2 = s/2 deep. */
 function grid(room, F) {
-  const c = clsOf(room.cls);
-  if (c.mode === 'none') return {nx: 0, ny: 0, count: 0, mode: 'none'};
+  const c = clsOf(room.cls), wall = room.mount === 'wall';
+  if (c.mode === 'none') return {nx: 0, ny: 0, count: 0, mode: 'none', wall};
   const d = dims(room, F), s = spacing(c.mode);
-  if (!d || !s) return {nx: 0, ny: 0, count: 0, mode: c.mode, missing: !d};
+  if (!d || !s) return {nx: 0, ny: 0, count: 0, mode: c.mode, missing: !d, wall};
+  if (wall) {
+    const on = wallsOn(room), per = {}, depth = s / 2; let count = 0;
+    for (const k of WALLS) { const L = k === 'n' || k === 's' ? d.l : d.w; per[k] = on[k] ? Math.max(1, Math.ceil(L / s - 1e-9)) : 0; count += per[k]; }
+    const ux = d.l - (on.w ? depth : 0) - (on.e ? depth : 0), uy = d.w - (on.n ? depth : 0) - (on.s ? depth : 0);
+    const uncovered = !count ? {x0: 0, y0: 0, l: d.l, w: d.w} : (ux > .05 && uy > .05 ? {x0: on.w ? depth : 0, y0: on.n ? depth : 0, l: ux, w: uy} : null);
+    return {wall: true, per, on, count, mode: c.mode, s, r: s / Math.SQRT2, depth, uncovered, d};
+  }
   const nx = Math.max(1, Math.ceil(d.l / s - 1e-9)), ny = Math.max(1, Math.ceil(d.w / s - 1e-9));
   return {nx, ny, count: nx * ny, mode: c.mode, s};
 }
 function autoPts(room, g) {
   const pts = [];
+  if (g.wall) {
+    const ins = Math.max(2, Math.min(room.w, room.h) * .03);
+    for (const k of WALLS) for (let i = 0, n = g.per[k]; i < n; i++) {
+      const t = (i + .5) / n;
+      if (k === 'n') pts.push({x: room.x + t * room.w, y: room.y + ins, ex: room.x + t * room.w, ey: room.y, wall: k});
+      if (k === 's') pts.push({x: room.x + t * room.w, y: room.y + room.h - ins, ex: room.x + t * room.w, ey: room.y + room.h, wall: k});
+      if (k === 'w') pts.push({x: room.x + ins, y: room.y + t * room.h, ex: room.x, ey: room.y + t * room.h, wall: k});
+      if (k === 'e') pts.push({x: room.x + room.w - ins, y: room.y + t * room.h, ex: room.x + room.w, ey: room.y + t * room.h, wall: k});
+    }
+    return pts;
+  }
   for (let j = 0; j < g.ny; j++) for (let i = 0; i < g.nx; i++) pts.push({x: room.x + (i + .5) * room.w / g.nx, y: room.y + (j + .5) * room.h / g.ny});
   return pts;
 }
+// Uncovered core of a wall-mounted room, in plan pixels.
+function uncoveredRect(room, g) {
+  if (!g.wall || !g.uncovered) return null;
+  const kx = room.w / g.d.l, ky = room.h / g.d.w, u = g.uncovered;
+  return {x: room.x + u.x0 * kx, y: room.y + u.y0 * ky, w: u.l * kx, h: u.w * ky, l: u.l, wft: u.w};
+}
+const gridLabel = g => g.wall ? `Walls ${WALLS.filter(k => g.per[k]).map(k => g.per[k]).join('+') || '–'}` : `${g.nx}×${g.ny} grid`;
+function hatch(c, R, step, color, lw) {
+  c.save(); c.beginPath(); c.rect(R.x, R.y, R.w, R.h); c.clip(); c.strokeStyle = color; c.lineWidth = lw; c.setLineDash([]); c.beginPath();
+  for (let t = -R.h; t < R.w; t += step) { c.moveTo(R.x + t, R.y + R.h); c.lineTo(R.x + t + R.h, R.y); }
+  c.stroke(); c.restore();
+}
 function floorStats(F) {
-  const by = new Map(); let auto = 0, missing = 0, generalSqft = 0;
+  const by = new Map(), uncovered = []; let auto = 0, missing = 0, generalSqft = 0;
   for (const c of S.P.classes) by.set(c.id, {rooms: 0, sqft: 0, sensors: 0});
   for (const r of F.rooms) {
     const c = clsOf(r.cls), b = by.get(c.id), d = dims(r, F), g = grid(r, F);
     b.rooms++; if (d) b.sqft += d.l * d.w; else if (c.mode !== 'none') missing++;
     const a = r.auto ? g.count : 0; auto += a; b.sensors += a;
+    if (r.auto && g.wall && g.uncovered && c.mode !== 'none') uncovered.push({room: r, g});
     if (d && c.mode === 'general') generalSqft += d.l * d.w;
   }
   let unassigned = 0;
@@ -365,7 +414,7 @@ function floorStats(F) {
     if (r) by.get(clsOf(r.cls).id).sensors++; else unassigned++;
   }
   const manual = F.sensors.length;
-  return {by, auto, manual, unassigned, total: auto + manual, missing, generalSqft};
+  return {by, auto, manual, unassigned, total: auto + manual, missing, generalSqft, uncovered};
 }
 const projectTotal = () => S.floors.reduce((n, F) => n + floorStats(F).total, 0);
 function roomAt(ip) {
@@ -456,7 +505,18 @@ function drawScene(c, F, px, o) {
     c.fillStyle = hexA(cl.color, r.id === selRoom ? .24 : .15); c.fillRect(r.x, r.y, r.w, r.h);
     c.lineWidth = (r.id === selRoom ? 3 : 2) * px; c.strokeStyle = cl.color; c.setLineDash([]); c.strokeRect(r.x, r.y, r.w, r.h);
     if (r.id === selRoom && o.live) { c.lineWidth = 1.5 * px; c.strokeStyle = GOLD_DK; c.setLineDash([6 * px, 4 * px]); c.strokeRect(r.x - 4 * px, r.y - 4 * px, r.w + 8 * px, r.h + 8 * px); c.setLineDash([]); }
-    if (S.showCells && r.auto) {
+    if (r.auto && r.mount === 'wall') {
+      const g = grid(r, F);
+      if (g.count && S.showCells) {
+        const kx = r.w / g.d.l, ky = r.h / g.d.w, A = {n: [0, Math.PI], s: [Math.PI, 2 * Math.PI], w: [-Math.PI / 2, Math.PI / 2], e: [Math.PI / 2, 1.5 * Math.PI]};
+        c.save(); c.beginPath(); c.rect(r.x, r.y, r.w, r.h); c.clip();
+        for (const p of autoPts(r, g)) { c.beginPath(); c.moveTo(p.ex, p.ey); c.ellipse(p.ex, p.ey, g.r * kx, g.r * ky, 0, A[p.wall][0], A[p.wall][1]); c.closePath();
+          c.fillStyle = hexA(cl.color, .10); c.fill(); c.setLineDash([5 * px, 4 * px]); c.lineWidth = 1.2 * px; c.strokeStyle = hexA(cl.color, .75); c.stroke(); }
+        c.restore(); c.setLineDash([]);
+      }
+      const U = uncoveredRect(r, g);
+      if (U) { hatch(c, U, 12 * px, 'rgba(168,100,0,.55)', 1.4 * px); c.lineWidth = 1.5 * px; c.strokeStyle = 'rgba(168,100,0,.8)'; c.setLineDash([6 * px, 4 * px]); c.strokeRect(U.x, U.y, U.w, U.h); c.setLineDash([]); }
+    } else if (S.showCells && r.auto) {
       const g = grid(r, F);
       if (g.count > 1) {
         c.save(); c.setLineDash([5 * px, 4 * px]); c.lineWidth = 1.2 * px; c.strokeStyle = hexA(cl.color, .75); c.beginPath();
@@ -471,8 +531,8 @@ function drawScene(c, F, px, o) {
   for (const r of F.rooms) {
     if (r.w / px < 70 || r.h / px < 38) continue;
     const cl = clsOf(r.cls), d = dims(r, F), g = grid(r, F);
-    const l1 = r.name, l2 = d ? `${fmtFt(d.l)} × ${fmtFt(d.w)}` : 'No scale', l3 = cl.mode === 'none' ? 'No sensors' : (r.auto ? (g.count ? `${g.nx}×${g.ny} grid` : '') : 'Manual layout');
-    const x = r.x + 6 * px, y = r.y + 5 * px;
+    const l1 = r.name, l2 = d ? `${fmtFt(d.l)} × ${fmtFt(d.w)}` : 'No scale', l3 = cl.mode === 'none' ? 'No sensors' : (r.auto ? (g.count ? gridLabel(g) : (g.wall && !g.missing ? 'No walls selected' : '')) : 'Manual layout');
+    const wallTop = r.auto && g.wall && g.per && g.per.n, x = r.x + (wallTop && g.per.w ? 30 : 6) * px, y = r.y + (wallTop ? Math.max(2, Math.min(r.w, r.h) * .03) + 15 * px : 5 * px);
     c.save(); c.beginPath(); c.rect(r.x, r.y, r.w, r.h); c.clip();
     c.font = `700 ${13 * px}px "Avenir Next Condensed","Arial Narrow",Arial,sans-serif`;
     halo(c, l1, x, y, px, '#15191b');
@@ -797,6 +857,14 @@ function roomPanel(F, r) {
   let layout;
   if (c.mode === 'none') layout = `<p>This class gets no sensors.</p>`;
   else if (!d) layout = `<div class="warnbox">No dimensions yet. Set the floor scale with the Scale tool, or type this room’s length and width above.</div>`;
+  else if (r.auto && g.wall) {
+    const math = WALLS.map(k => g.on[k] ? `${WALL_NAME[k]}: ROUNDUP(${(k === 'n' || k === 's' ? d.l : d.w).toFixed(1)} ÷ ${s.toFixed(1)}) = ${g.per[k]}` : `${WALL_NAME[k]}: skipped`).join('<br>');
+    const U = g.uncovered;
+    layout = `<div class="stat"><span>Wall-mounted, ${s.toFixed(1)} ft apart, reaching ${g.depth.toFixed(1)} ft from each wall</span><span class="big">${g.count}</span></div>
+      <p class="note">${math}</p>
+      ${!g.count ? '<div class="warnbox">No walls selected, so this room gets no sensors.</div>'
+        : U ? `<div class="warnbox">Center ${fmtFt(U.l)} × ${fmtFt(U.w)} (${fmtInt(U.l * U.w)} sq ft) isn’t reached from the walls. It’s shaded on the plan and noted in the report.</div>` : '<p class="note">The walls reach the whole room.</p>'}`;
+  }
   else if (r.auto) layout = `<div class="stat"><span>${g.nx} × ${g.ny} grid at ${s.toFixed(1)} ft spacing</span><span class="big">${g.count}</span></div>
       <p class="note">ROUNDUP(${d.l.toFixed(1)} ÷ ${s.toFixed(1)}) × ROUNDUP(${d.w.toFixed(1)} ÷ ${s.toFixed(1)}) = ${g.nx} × ${g.ny}</p>`;
   else layout = `<div class="stat"><span>Manual layout</span><span class="big">${detached}</span></div><p class="note">Auto grid would place ${g.count}. Drag sensors on the plan to adjust.</p><button class="btn" data-act="resetAuto">Reset to auto layout</button>`;
@@ -808,10 +876,20 @@ function roomPanel(F, r) {
       <div class="row2"><div class="field"><label class="k" for="dimL">Length ↔</label><input type="text" id="dimL" data-f="dimL" inputmode="decimal" value="${d ? fmtFt(d.l) : ''}" placeholder="ft-in" autocomplete="off"></div>
       <div class="field"><label class="k" for="dimW">Width ↕</label><input type="text" id="dimW" data-f="dimW" inputmode="decimal" value="${d ? fmtFt(d.w) : ''}" placeholder="ft-in" autocomplete="off"></div></div>
       ${sqft != null ? `<div class="stat"><span>Area</span><span class="num">${fmtInt(sqft)} sq ft</span></div>` : ''}
+      <div class="field"><label class="k" for="roomHt">Ceiling height · optional, not in report</label><input type="text" id="roomHt" data-f="height" inputmode="decimal" value="${r.height ? fmtFt(r.height) : ''}" placeholder="ft-in" autocomplete="off"></div>
       ${r.dim ? `<div class="btns">${F.pxPerFt ? '<button class="btn" data-act="clearDim">Use scale instead</button>' : ''}<button class="btn" data-act="scaleFromRoom">Set floor scale from this room</button></div>` : ''}</div>
+    ${c.mode === 'none' ? '' : mountSection(r, g, d)}
     <div class="sec"><span class="k">Sensors</span>${layout}
       ${prio ? `<div class="stat"><span>Priority sensors in this room</span><span class="num">+${prio}</span></div>` : ''}</div>
     <button class="btn danger ${armed ? 'armed' : ''}" data-act="delRoom">${armed ? 'Tap again to delete' : 'Delete room'}</button>`;
+}
+function mountSection(r, g, d) {
+  const wall = r.mount === 'wall', on = wallsOn(r);
+  const btn = k => `<button class="w${k}" data-act="wallToggle" data-k="${k}" aria-pressed="${on[k]}" aria-label="${WALL_NAME[k]} wall: ${on[k] ? (g.per ? g.per[k] : 0) + ' sensors' : 'skipped'}">${on[k] ? (g.wall && g.count != null && g.per ? g.per[k] : '✓') : 'off'}</button>`;
+  return `<div class="sec"><span class="k">Mounting</span>
+    <div class="seg" role="group" aria-label="Mounting"><button data-act="mount" data-v="ceiling" aria-pressed="${!wall}">Ceiling grid</button><button data-act="mount" data-v="wall" aria-pressed="${wall}">Walls</button></div>
+    ${wall ? `<div class="wallpick">${WALLS.map(btn).join('')}<div class="core">${d ? `${fmtFt(d.l)}<br>× ${fmtFt(d.w)}` : 'Room'}</div></div>
+      <p class="note">Tap a wall to skip it, e.g. behind bleachers, glass or doors. Wall sensors use the same reach as ceiling sensors and each covers half the area.</p>` : ''}</div>`;
 }
 function sensorPanel(F, s) {
   const r = s.roomId && F.rooms.find(x => x.id === s.roomId), armed = S.armed === 'sensor:' + s.id;
@@ -824,7 +902,7 @@ function sensorPanel(F, s) {
 function autoPanel(F, r, idx) {
   const g = grid(r, F);
   return `<div class="sec"><span class="k">Auto-placed sensor</span><h2>${esc(r.name)}</h2>
-    <p>Sensor ${idx + 1} of ${g.count} in a ${g.nx} × ${g.ny} grid. Drag it to switch this room to a hand-placed layout.</p></div>
+    <p>Sensor ${idx + 1} of ${g.count} ${g.wall ? `on the walls (this one on the ${WALL_NAME[autoPts(r, g)[idx]?.wall] || ''} wall)` : `in a ${g.nx} × ${g.ny} grid`}. Drag it to switch this room to a hand-placed layout.</p></div>
     <button class="btn" data-act="selRoom">Select room</button>`;
 }
 function detectPanel() {
@@ -838,8 +916,8 @@ function summaryPanel(F) {
   const st = floorStats(F), p = S.P, total = projectTotal();
   const rows = p.classes.map(c => ({c, b: st.by.get(c.id)})).filter(x => x.b.rooms).map(({c, b}) =>
     `<tr><td><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</td><td>${b.rooms}</td><td>${fmtInt(b.sqft)}</td><td>${b.sensors}</td></tr>`).join('');
-  const isPh = p.settings.cigCov === PLACEHOLDER.cigCov && p.settings.vapeCov === PLACEHOLDER.vapeCov;
-  const pooled = p.settings.cigCov > 0 ? Math.ceil(st.generalSqft / p.settings.cigCov - 1e-9) : 0;
+  const isPh = p.settings.cigR === PLACEHOLDER.cigR && p.settings.vapeR === PLACEHOLDER.vapeR, circ = Math.PI * p.settings.cigR ** 2;
+  const pooled = circ > 0 ? Math.ceil(st.generalSqft / circ - 1e-9) : 0;
   return `<div class="tb">
       <div class="w"><span class="k">Project</span><span class="v">${esc(p.name)}</span></div>
       <div><span class="k">Floor</span><span class="v">${esc(F.name)}</span></div>
@@ -848,16 +926,17 @@ function summaryPanel(F) {
       <div><span class="k">All floors</span><span class="big">${total}</span></div>
     </div>
     ${!F.pxPerFt ? '<div class="warnbox">No scale on this floor. Use the Scale tool on a known dimension, or type a room’s size and set the scale from it.</div>' : ''}
+    ${st.uncovered.length ? `<div class="warnbox">${st.uncovered.map(x => esc(x.room.name)).join(', ')}: wall-mounted, with ${st.uncovered.length > 1 ? 'centers' : 'a center'} the walls don’t reach (shaded on the plan).</div>` : ''}
     ${st.missing ? `<div class="warnbox">${st.missing} room${st.missing > 1 ? 's have' : ' has'} no dimensions, so ${st.missing > 1 ? 'they get' : 'it gets'} no sensors yet.</div>` : ''}
     ${F.rooms.length ? `<table class="tbl"><thead><tr><th>Class</th><th>Rooms</th><th>Sq ft</th><th>Sensors</th></tr></thead><tbody>${rows}
       ${st.unassigned ? `<tr><td>Priority, outside rooms</td><td>–</td><td>–</td><td>${st.unassigned}</td></tr>` : ''}
       <tr class="tot"><td>This floor</td><td>${F.rooms.length}</td><td>${fmtInt([...st.by.values()].reduce((a, b) => a + b.sqft, 0))}</td><td>${st.total}</td></tr></tbody></table>`
       : `<p>No rooms marked on this floor yet. Pick <b>Room</b> to drag one out, or <b>Detect</b> and tap inside a room.</p>`}
     <div class="sec"><span class="k">Coverage ${isPh ? '<span class="tag warn">Placeholder</span>' : ''}</span>
-      <div class="stat"><span>Cig / THC · ${fmtInt(p.settings.cigCov)} sq ft</span><span class="num">${spacing('general').toFixed(1)} ft grid</span></div>
-      <div class="stat"><span>Vape · ${fmtInt(p.settings.vapeCov)} sq ft</span><span class="num">${spacing('vape').toFixed(1)} ft grid</span></div>
-      ${isPh ? '<p class="note">These ranges are stand-ins. Enter the sensor’s rated coverage in Settings before quoting.</p>' : ''}
-      ${st.generalSqft ? `<p class="note">For comparison: pooling this floor’s ${fmtInt(st.generalSqft)} sq ft of Cig / THC area would give ${pooled} sensors. Totals use the per-room grid.</p>` : ''}</div>
+      <div class="stat"><span>Cig / THC · ${ftR(p.settings.cigR)} reach</span><span class="num">${spacing('general').toFixed(1)} ft grid</span></div>
+      <div class="stat"><span>Vape · ${ftR(p.settings.vapeR)} reach</span><span class="num">${spacing('vape').toFixed(1)} ft grid</span></div>
+      ${isPh ? '<p class="note">These distances are stand-ins. Enter the measured detection distances in Settings before quoting.</p>' : ''}
+      ${st.generalSqft ? `<p class="note">For comparison: dividing this floor’s ${fmtInt(st.generalSqft)} sq ft of Cig / THC area by one sensor’s circle (${fmtInt(circ)} sq ft) gives ${pooled}. Totals use the room-by-room grid, which overlaps circles so no spot is missed.</p>` : ''}</div>
     <div class="sec"><span class="k">Meeting notes <span class="tag neutral">In report</span></span>
       <div class="field"><label class="k" for="notesTitle">Heading</label><input type="text" id="notesTitle" data-f="notesTitle" value="${esc(F.notesTitle || 'Open items for confirmation')}" autocomplete="off"></div>
       <div class="field"><label class="k" for="notes">Notes for ${esc(F.name)} · one item per line</label><textarea id="notes" data-f="notes" rows="5" placeholder="e.g. Confirm whether the principal’s office needs its own sensor.">${esc(F.notes || '')}</textarea></div></div>
@@ -876,6 +955,8 @@ insp.addEventListener('click', e => {
     case 'cls': if (room) mutate(() => { const old = clsOf(room.cls); room.cls = b.dataset.id; S.lastCls = b.dataset.id; if (room.autoName && room.name.startsWith(old.name + ' ')) room.name = nextName(b.dataset.id); }); break;
     case 'clearDim': if (room) mutate(() => { room.dim = null; }); break;
     case 'scaleFromRoom': if (room && room.dim) mutate(() => { F.pxPerFt = (room.w / room.dim.l + room.h / room.dim.w) / 2; F.scaleLine = null; room.dim = null; toast(`Scale set from ${room.name}: ${F.pxPerFt.toFixed(2)} px per ft.`); }); break;
+    case 'mount': if (room) mutate(() => { room.mount = b.dataset.v === 'wall' ? 'wall' : 'ceiling'; }); break;
+    case 'wallToggle': if (room) mutate(() => { const on = wallsOn(room); on[b.dataset.k] = !on[b.dataset.k]; room.walls = on; }); break;
     case 'resetAuto': if (room) mutate(() => { F.sensors = F.sensors.filter(x => !(x.roomId === room.id && x.detached)); room.auto = true; }); break;
     case 'delRoom': case 'delSensor': {
       const key = (act === 'delRoom' ? 'room:' : 'sensor:') + s.id;
@@ -899,6 +980,12 @@ insp.addEventListener('click', e => {
 insp.addEventListener('change', e => {
   const t = e.target, f = t.dataset.f; if (!f) return; const F = curFloor(), s = S.sel;
   if (f === 'name' && s?.type === 'room') { const r = F.rooms.find(x => x.id === s.id); const v = t.value.trim(); if (r && v && v !== r.name) mutate(() => { r.name = v; r.autoName = false; }); }
+  if (f === 'height' && s?.type === 'room') {
+    const r = F.rooms.find(x => x.id === s.id); if (!r) return; const raw = t.value.trim();
+    if (!raw) { if (r.height) mutate(() => { delete r.height; }); return; }
+    const v = parseFt(raw); if (!v) { toast('Enter a height like 28 or 12\'6".'); renderInspector(); return; }
+    if (v !== r.height) mutate(() => { r.height = v; }); return;
+  }
   if ((f === 'dimL' || f === 'dimW') && s?.type === 'room') {
     const r = F.rooms.find(x => x.id === s.id); if (!r) return; const v = parseFt(t.value);
     if (!v) { toast('Enter a length like 30 or 12\'6".'); renderInspector(); return; }
@@ -961,11 +1048,23 @@ async function openProject(id) {
   try {
     const p = await S.store.getProject(id); if (!p) throw new Error('missing');
     p.classes = p.classes && p.classes.length ? p.classes : clone(DEFAULT_CLASSES);
-    p.settings = {...{cigCov: PLACEHOLDER.cigCov, vapeCov: PLACEHOLDER.vapeCov}, ...(p.settings || {})}; p.schema = p.schema || 1;
+    p.settings = {...(p.settings || {})}; p.schema = p.schema || 1;
+    if (p.schema < 2) {   // one-time: add the separate Gym and Cafeteria classes to older projects
+      for (const id of ['gym', 'cafeteria']) if (!p.classes.some(c => c.id === id)) { const at = p.classes.findIndex(c => c.id === 'large'); p.classes.splice(at < 0 ? p.classes.length : at, 0, clone(DEFAULT_CLASSES.find(c => c.id === id))); }
+      p.schema = 2; S.migrated = true;
+    }
+    if (p.schema < 3) {   // one-time: coverage was stored as sq ft (circle area); store the detection distance instead
+      const st = p.settings, toR = (cov, oldPh, ph) => cov == null || cov === oldPh ? ph : Math.round(Math.sqrt(cov / Math.PI) * 100) / 100;
+      if (st.cigR == null) st.cigR = toR(st.cigCov, 1000, PLACEHOLDER.cigR);
+      if (st.vapeR == null) st.vapeR = toR(st.vapeCov, 500, PLACEHOLDER.vapeR);
+      delete st.cigCov; delete st.vapeCov; p.schema = 3; S.migrated = true;
+    }
+    p.settings = {cigR: PLACEHOLDER.cigR, vapeR: PLACEHOLDER.vapeR, ...p.settings};
     const floors = (await S.store.listFloors(id)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     for (const f of floors) { f.rooms = f.rooms || []; f.sensors = f.sensors || []; }
     S.P = p; S.floors = floors; S.demo = false; S.imgs.clear(); S.ana.clear(); S.hist.clear(); S.lastCls = null;
     LS.set('project', id); setSave('saved');
+    if (S.migrated) { S.migrated = false; S.dirtyProject = true; scheduleSave(); }
     const last = LS.get('floor:' + id, null);
     await setFloor(floors.some(f => f.id === last) ? last : (floors[0] ? floors[0].id : null));
   } catch { toast('Couldn’t open that project.'); }
@@ -1027,10 +1126,11 @@ function openSettings() {
   openSheet(`<div class="sheet-head"><h2>Settings</h2>${closeBtn}</div>
     <div class="row2"><div class="field"><label class="k" for="stName">Project name</label><input type="text" id="stName" value="${esc(p.name)}" autocomplete="off"></div>
       <div class="field"><label class="k" for="stType">Site type</label><select id="stType">${['School', 'Hotel', 'Other'].map(t => `<option ${p.siteType === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div>
-    <div class="sec"><span class="k">Sensor coverage (sq ft per sensor)</span>
-      <div class="row2"><div class="field"><label class="k" for="stCig">Cig / THC</label><input type="number" id="stCig" min="1" step="1" value="${st.cigCov}"></div>
-      <div class="field"><label class="k" for="stVape">Vape</label><input type="number" id="stVape" min="1" step="1" value="${st.vapeCov}"></div></div>
-      <p class="note">Grid spacing is the square root of coverage. Each sensor gets a square cell, and each room gets ROUNDUP(L ÷ spacing) × ROUNDUP(W ÷ spacing) sensors. The defaults (1,000 and 500) are placeholders, not a spec.</p></div>
+    <div class="sec"><span class="k">Detection distance (ft) · farthest the sensor picks up</span>
+      <div class="row2"><div class="field"><label class="k" for="stCig">Cig / THC</label><input type="number" id="stCig" min="1" step="0.1" inputmode="decimal" value="${st.cigR}"></div>
+      <div class="field"><label class="k" for="stVape">Vape</label><input type="number" id="stVape" min="1" step="0.1" inputmode="decimal" value="${st.vapeR}"></div></div>
+      <p class="note" id="stCovNote"></p>
+      <p class="note">Each sensor covers a circle of radius R. Sensors are spaced R × √2 apart, the widest spacing where neighboring circles leave no gaps, and each room gets ROUNDUP(L ÷ spacing) × ROUNDUP(W ÷ spacing). Wall-mounted sensors cover the half circle: same spacing, reaching R ÷ √2 into the room. The defaults (${PLACEHOLDER.cigR} and ${PLACEHOLDER.vapeR} ft) are placeholders.</p></div>
     <div class="sec"><span class="k">Report branding · all projects</span>
       <div class="field"><label class="k" for="stCompany">Company name in report header</label><input type="text" id="stCompany" value="${esc(S.brand.company || '')}" autocomplete="off"></div>
       <img class="logo-prev" id="stLogoPrev" alt="Logo preview" ${S.brand.logo ? `src="${S.brand.logo.src}"` : 'hidden'}>
@@ -1041,7 +1141,14 @@ function openSettings() {
       <p class="note">Vape classes use the vape spacing; Cig / THC classes use the wider one. Removing a class moves its rooms to Other.</p></div>
     <div class="btns"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveSettings">Save settings</button></div>`);
   S.sheetState = {classes: clone(p.classes), logo: undefined};
+  covNote();
 }
+function covNote() {
+  const el = $('#stCovNote'); if (!el) return;
+  const line = (name, R) => R > 0 ? `${name}: circle ${fmtInt(Math.PI * R * R)} sq ft · spacing ${(R * Math.SQRT2).toFixed(1)} ft · counted ${fmtInt(2 * R * R)} sq ft per ceiling sensor` : `${name}: enter a distance`;
+  el.innerHTML = line('Cig / THC', +$('#stCig').value) + '<br>' + line('Vape', +$('#stVape').value);
+}
+card.addEventListener('input', e => { if (e.target.id === 'stCig' || e.target.id === 'stVape') covNote(); });
 card.addEventListener('click', async e => {
   const b = e.target.closest('[data-act]'); if (!b) return; const act = b.dataset.act;
   if (act === 'close') return closeSheet();
@@ -1077,8 +1184,8 @@ card.addEventListener('click', async e => {
   if (act === 'delCls') { syncClassInputs(); const cl = S.sheetState.classes; if (cl.length <= 1) return; const [gone] = cl.splice(+b.dataset.i, 1); if (gone.id === 'other') { cl.splice(+b.dataset.i, 0, gone); return toast('Other is the fallback class and can’t be removed.'); } return rerenderClasses(); }
   if (act === 'saveSettings') {
     syncClassInputs(); const p = S.P, cig = +$('#stCig').value, vape = +$('#stVape').value;
-    if (!(cig > 0 && vape > 0)) return toast('Coverage values must be above zero.');
-    p.name = $('#stName').value.trim() || p.name; p.siteType = $('#stType').value; p.settings.cigCov = cig; p.settings.vapeCov = vape;
+    if (!(cig > 0 && vape > 0)) return toast('Detection distances must be above zero.');
+    p.name = $('#stName').value.trim() || p.name; p.siteType = $('#stType').value; p.settings.cigR = cig; p.settings.vapeR = vape;
     const ids = new Set(S.sheetState.classes.map(c => c.id)); p.classes = S.sheetState.classes;
     if (!ids.has('other')) p.classes.push(DEFAULT_CLASSES.find(c => c.id === 'other'));
     for (const F of S.floors) { let hit = false; for (const r of F.rooms) if (!ids.has(r.cls)) { r.cls = 'other'; hit = true; } if (hit) S.dirtyFloors.add(F.id); }
@@ -1170,19 +1277,20 @@ function offerFile(file) {
 const slug = s => String(s).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
 function buildCSV() {
   const p = S.P, q = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const rows = [['Project', 'Floor', 'Room', 'Class', 'Detection', 'Length (ft)', 'Width (ft)', 'Sq ft', 'Grid', 'Auto sensors', 'Hand-placed / priority', 'Total sensors', 'Notes']];
+  const rows = [['Project', 'Floor', 'Room', 'Class', 'Detection', 'Mount', 'Length (ft)', 'Width (ft)', 'Sq ft', 'Ceiling height (ft)', 'Layout', 'Auto sensors', 'Hand-placed / priority', 'Total sensors', 'Not covered (sq ft)', 'Notes']];
   let grand = 0;
   for (const F of S.floors) {
     for (const r of F.rooms) {
       const c = clsOf(r.cls), d = dims(r, F), g = grid(r, F), man = F.sensors.filter(s => s.roomId === r.id), a = r.auto ? g.count : 0;
       grand += a + man.length;
-      rows.push([p.name, F.name, r.name, c.name, MODE_LABEL[c.mode], d ? d.l.toFixed(2) : '', d ? d.w.toFixed(2) : '', d ? Math.round(d.l * d.w) : '', g.count ? `${g.nx} x ${g.ny}` : '', a, man.length, a + man.length, man.map(s => s.note).filter(Boolean).join('; ')]);
+      const unc = r.auto && g.wall && g.uncovered && c.mode !== 'none' ? Math.round(g.uncovered.l * g.uncovered.w) : '';
+      rows.push([p.name, F.name, r.name, c.name, MODE_LABEL[c.mode], r.mount === 'wall' ? 'Walls' : 'Ceiling', d ? d.l.toFixed(2) : '', d ? d.w.toFixed(2) : '', d ? Math.round(d.l * d.w) : '', r.height ? r.height.toFixed(2) : '', g.count ? (g.wall ? gridLabel(g) : `${g.nx} x ${g.ny}`) : '', a, man.length, a + man.length, unc, man.map(s => s.note).filter(Boolean).join('; ')]);
     }
     const loose = F.sensors.filter(s => !s.roomId || !F.rooms.some(r => r.id === s.roomId));
-    if (loose.length) { grand += loose.length; rows.push([p.name, F.name, 'Priority sensors outside marked rooms', '', '', '', '', '', '', 0, loose.length, loose.length, loose.map(s => s.note).filter(Boolean).join('; ')]); }
+    if (loose.length) { grand += loose.length; rows.push([p.name, F.name, 'Priority sensors outside marked rooms', '', '', '', '', '', '', '', '', 0, loose.length, loose.length, '', loose.map(s => s.note).filter(Boolean).join('; ')]); }
   }
-  rows.push([]); rows.push(['Total sensors', '', '', '', '', '', '', '', '', '', '', grand]);
-  rows.push(['Cig / THC coverage (sq ft per sensor)', p.settings.cigCov]); rows.push(['Vape coverage (sq ft per sensor)', p.settings.vapeCov]);
+  rows.push([]); rows.push(['Total sensors', '', '', '', '', '', '', '', '', '', '', '', '', grand]);
+  rows.push(['Cig / THC detection distance (ft)', p.settings.cigR]); rows.push(['Vape detection distance (ft)', p.settings.vapeR]);
   return rows.map(r => r.map(q).join(',')).join('\r\n');
 }
 function exportCSV() { saveFile(`${slug(S.P.name)}-sensors.csv`, buildCSV()); }
@@ -1269,12 +1377,17 @@ function drawReportPlan(c, F, PR, u) {
   c.fillStyle = '#ffffff'; c.fillRect(PR.x, PR.y, PR.w, PR.h);
   if (img) { c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(img, PR.x, PR.y, PR.w, PR.h); }
   for (const r of F.rooms) { const cl = clsOf(r.cls), q = Q(r); c.fillStyle = hexA(cl.color, .2); c.fillRect(q.x, q.y, q.w, q.h); c.strokeStyle = cl.color; c.lineWidth = 2.5 * u; c.setLineDash([]); c.strokeRect(q.x, q.y, q.w, q.h); }
+  for (const x of floorStats(F).uncovered) {   // wall-mounted rooms: area the walls don't reach
+    const U = uncoveredRect(x.room, x.g); if (!U) continue; const q = Q(U);
+    hatch(c, q, 14 * u, 'rgba(150,90,0,.6)', 2 * u); c.lineWidth = 2 * u; c.strokeStyle = 'rgba(150,90,0,.85)'; c.setLineDash([9 * u, 6 * u]); c.strokeRect(q.x, q.y, q.w, q.h); c.setLineDash([]);
+  }
   c.textAlign = 'left'; c.textBaseline = 'top';
   for (const r of F.rooms) {
     const q = Q(r); if (q.w < 100 * u || q.h < 44 * u) continue; const d = dims(r, F);
     c.save(); c.beginPath(); c.rect(q.x, q.y, q.w, q.h); c.clip();
-    rFont(c, 15 * u, 700); haloR(c, r.name, q.x + 7 * u, q.y + 6 * u, u, '#15191b');
-    if (d && q.h > 64 * u) { rFont(c, 12.5 * u, 500, RMONO); haloR(c, `${fmtFt(d.l)} × ${fmtFt(d.w)}`, q.x + 7 * u, q.y + 26 * u, u, '#3a4448'); }
+    const gg = grid(r, F), wt = r.auto && gg.wall && gg.per && gg.per.n, lx = q.x + (wt && gg.per.w ? 40 : 7) * u, ly = q.y + (wt ? 38 : 6) * u;
+    rFont(c, 15 * u, 700); haloR(c, r.name, lx, ly, u, '#15191b');
+    if (d && q.h > (wt ? 96 : 64) * u) { rFont(c, 12.5 * u, 500, RMONO); haloR(c, `${fmtFt(d.l)} × ${fmtFt(d.w)}`, lx, ly + 20 * u, u, '#3a4448'); }
     c.restore();
   }
   const R = 16 * u;   // every sensor drawn the same: plain red dot, no letters
@@ -1292,11 +1405,12 @@ function drawLegend(c, u, pos, L, classes) {
   if (logo) { const s = Math.min(L.lh / logo.naturalHeight, (L.w - 48 * u) / logo.naturalWidth); c.drawImage(logo, x + 24 * u, cy, logo.naturalWidth * s, logo.naturalHeight * s); cy += L.lh + 18 * u; }
   c.textAlign = 'left'; c.textBaseline = 'middle';
   rFont(c, 22 * u, 500); setLS(c, 1 * u); c.fillStyle = '#111111'; c.fillText('LEGEND', x + 24 * u, cy + 16 * u); setLS(c, 0); cy += 44 * u;
-  const items = [...classes.map(cl => ({name: cl.name, color: cl.color})), {name: 'Sensor', sensor: true}];
+  const items = [...classes.map(cl => ({name: cl.name, color: cl.color})), {name: 'Sensor', sensor: true}, ...(L.gap ? [{name: 'Not reached from walls', gap: true}] : [])];
   for (const it of items) {
     const cx = x + 46 * u, my = cy + 27 * u;
     c.beginPath(); c.arc(cx, my, 20 * u, 0, Math.PI * 2);
-    if (it.sensor) { c.fillStyle = RPT.red; c.fill(); }
+    if (it.gap) { c.save(); c.clip(); hatch(c, {x: cx - 20 * u, y: my - 20 * u, w: 40 * u, h: 40 * u}, 9 * u, 'rgba(150,90,0,.75)', 2 * u); c.restore(); c.beginPath(); c.arc(cx, my, 20 * u, 0, Math.PI * 2); c.lineWidth = 2.5 * u; c.strokeStyle = 'rgba(150,90,0,.85)'; c.stroke(); }
+    else if (it.sensor) { c.fillStyle = RPT.red; c.fill(); }
     else { c.fillStyle = hexA(it.color, .25); c.fill(); c.lineWidth = 3 * u; c.strokeStyle = it.color; c.stroke(); }
     fitFont(c, it.name, L.w - 108 * u, 23 * u); c.fillStyle = '#111111'; c.fillText(it.name, x + 84 * u, my);
     cy += 54 * u;
@@ -1306,7 +1420,7 @@ function drawLegend(c, u, pos, L, classes) {
 function rPlanPage(c, u, F) {
   const FR = {x: 67 * u, y: 188 * u, w: 1516 * u, h: 982 * u}, pad = 14 * u;
   c.fillStyle = '#fbfbf9'; c.fillRect(FR.x, FR.y, FR.w, FR.h); c.strokeStyle = RPT.line; c.lineWidth = 1.5 * u; c.strokeRect(FR.x, FR.y, FR.w, FR.h);
-  const classes = S.P.classes.filter(cl => F.rooms.some(r => r.cls === cl.id)), L = legendMetrics(u, classes.length + 1);
+  const classes = S.P.classes.filter(cl => F.rooms.some(r => r.cls === cl.id)), gap = floorStats(F).uncovered.length > 0, L = {...legendMetrics(u, classes.length + 1 + (gap ? 1 : 0)), gap};
   let PA = {x: FR.x + pad, y: FR.y + pad, w: FR.w - 2 * pad, h: FR.h - 2 * pad}, PR = fitRect(PA, F.imgW, F.imgH);
   let pos = legendSpot(F, PR, FR, L, u);
   if (!pos) { PA = {...PA, w: PA.w - L.w - 18 * u}; PR = fitRect(PA, F.imgW, F.imgH); pos = {x: FR.x + FR.w - pad - L.w, y: FR.y + pad}; }
@@ -1387,19 +1501,30 @@ async function floorReportPages(F) {
   const m = document.createElement('canvas').getContext('2d'); rFont(m, NOTE.font * u);
   const items = noteItems(F.notes).map(t => wrapText(m, t, NOTE.textW * u));
   const title = (F.notesTitle && F.notesTitle.trim()) || 'Open items for confirmation';
-  const rows = summaryRows(st), LIMIT = 1180, fits = (top, list) => top + notesBoxH(list) <= LIMIT;
+  const wallRooms = F.rooms.filter(r => r.mount === 'wall' && r.auto && clsOf(r.cls).mode !== 'none').map(r => {
+    const g = grid(r, F), used = WALLS.filter(k => g.on && g.on[k]).length;
+    return `${r.name}: wall-mounted on ${used} wall${used === 1 ? '' : 's'}, ${g.count} sensor${g.count === 1 ? '' : 's'}` + (g.uncovered ? `; center ${fmtFt(g.uncovered.l)} × ${fmtFt(g.uncovered.w)} not reached from the walls` : '; full room reached');
+  });
+  const wallShown = wallRooms.slice(0, 5); if (wallRooms.length > 5) wallShown.push(`+ ${wallRooms.length - 5} more wall-mounted rooms (see room list)`);
+  const extra = wallShown.length ? 40 + wallShown.length * 26 : 0;
+  const rows = summaryRows(st), LIMIT = 1192, fits = (top, list) => top + notesBoxH(list) <= LIMIT;
   // Tighten table rows (54 → 40) if that keeps every note on the summary page; otherwise keep full rows and continue notes on later pages.
   let rowH = Math.max(34, Math.min(54, 600 / (rows.length + 1)));
-  for (let h = rowH; h >= 40; h -= 2) if (fits(475 + (rows.length + 1) * h + 98, items)) { rowH = h; break; }
+  for (let h = rowH; h >= 36; h -= 2) if (fits(475 + (rows.length + 1) * h + extra + 90, items)) { rowH = h; break; }
   const tableEnd = 475 + (rows.length + 1) * rowH;
-  let notesTop = tableEnd + 98; const first = [], rest = items.slice();
+  let notesTop = tableEnd + extra + 90; const first = [], rest = items.slice();
   if (fits(notesTop, [])) { while (rest.length && fits(notesTop, [...first, rest[0]])) first.push(rest.shift()); }
   if (!fits(notesTop, []) || (!first.length && rest.length)) notesTop = null;
   const summaryTitle = `${p.name} — ${F.name} Sensor Summary`;
   pages.push({left, draw: c => {
     rHeader(c, u, summaryTitle, 'Coverage breakdown by room class', date);
     drawCards(c, u, F, st, all); drawTable(c, u, rows, rowH, F, st);
-    if (notesTop != null) { rFont(c, 24 * u, 700); c.fillStyle = RPT.navy; c.textAlign = 'left'; c.fillText('Meeting Notes', 75 * u, (tableEnd + 66) * u); drawNotesBox(c, u, notesTop, title, first); }
+    if (wallShown.length) {
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic'; rFont(c, 14.5 * u, 700); setLS(c, .6 * u); c.fillStyle = RPT.muted; c.fillText('WALL-MOUNTED ROOMS', 75 * u, (tableEnd + 34) * u); setLS(c, 0);
+      rFont(c, 17.5 * u); c.fillStyle = RPT.text;
+      wallShown.forEach((t, i) => { const y = (tableEnd + 60 + i * 26) * u; c.fillStyle = 'rgba(150,90,0,.85)'; c.fillRect(77 * u, y - 11 * u, 9 * u, 9 * u); c.fillStyle = RPT.text; fitFont(c, t, 1480 * u, 17.5 * u); c.fillText(t, 98 * u, y); });
+    }
+    if (notesTop != null) { rFont(c, 24 * u, 700); c.fillStyle = RPT.navy; c.textAlign = 'left'; c.fillText('Meeting Notes', 75 * u, (tableEnd + extra + 60) * u); drawNotesBox(c, u, notesTop, title, first); }
   }});
   while (rest.length) {
     const chunk = [], top = 240;
@@ -1535,8 +1660,8 @@ function makeDemo() {
     ['CLASSROOM 101', 0, 0, 30, 30, 'classroom'], ['CLASSROOM 102', 30, 0, 60, 30, 'classroom'], ['CLASSROOM 103', 60, 0, 90, 30, 'classroom'],
     ['BOYS', 90, 0, 110, 30, 'bathroom'], ['GIRLS', 110, 0, 130, 30, 'bathroom'], ['OFFICE', 130, 0, 166, 30, 'office'],
     ['STAFF', 166, 0, 180, 10, 'bathroom'], ['MECH', 166, 10, 180, 30, 'none'], ['CORRIDOR', 0, 30, 180, 40, 'hallway'],
-    ['GYMNASIUM', 0, 40, 80, 100, 'large'], ['BOYS LOCKER', 80, 40, 100, 70, 'locker'], ['GIRLS LOCKER', 100, 40, 120, 70, 'locker'],
-    ['CLASSROOM 104', 80, 70, 120, 100, null], ['CAFETERIA', 120, 40, 180, 100, 'large'],
+    ['GYMNASIUM', 0, 40, 80, 100, 'gym'], ['BOYS LOCKER', 80, 40, 100, 70, 'locker'], ['GIRLS LOCKER', 100, 40, 120, 70, 'locker'],
+    ['CLASSROOM 104', 80, 70, 120, 100, null], ['CAFETERIA', 120, 40, 180, 100, 'cafeteria'],
   ];
   x.strokeStyle = '#1e2225'; x.lineCap = 'square';
   x.lineWidth = 6; for (const r of rooms) x.strokeRect(X(r[1]), Y(r[2]), (r[3] - r[1]) * K, (r[4] - r[2]) * K);
@@ -1558,7 +1683,7 @@ function makeDemo() {
   const ids = {};
   for (const r of rooms) { if (!r[5]) continue; const id = uid(); ids[r[0]] = id;
     const nm = r[0] === 'BOYS' ? 'Boys restroom' : r[0] === 'GIRLS' ? 'Girls restroom' : r[0] === 'STAFF' ? 'Staff restroom' : r[0].charAt(0) + r[0].slice(1).toLowerCase();
-    F.rooms.push({id, name: nm, autoName: false, cls: r[5], x: X(r[1]) + 4, y: Y(r[2]) + 4, w: (r[3] - r[1]) * K - 8, h: (r[4] - r[2]) * K - 8, dim: null, auto: true}); }
+    F.rooms.push({id, name: nm, autoName: false, cls: r[5], x: X(r[1]) + 4, y: Y(r[2]) + 4, w: (r[3] - r[1]) * K - 8, h: (r[4] - r[2]) * K - 8, dim: null, auto: true, ...(r[5] === 'gym' ? {mount: 'wall', height: 28} : {})}); }
   F.sensors.push({id: uid(), x: X(110), y: Y(35), roomId: ids['CORRIDOR'], note: 'Outside restrooms (example)', detached: false});
   F.notesTitle = 'Open items for confirmation';
   F.notes = 'Confirm whether the staff restroom needs its own sensor or can share the corridor unit (example).\nGym ceiling height to be verified before the final count (example).\nClassroom 104 not yet included in the quote (example).';
