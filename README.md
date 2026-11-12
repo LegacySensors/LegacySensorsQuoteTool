@@ -39,14 +39,34 @@ Any static HTTPS host works. Two easy ones:
 Always use the Home Screen icon. iPadOS keeps the Home Screen app's data separate from Safari's,
 so projects made in a Safari tab will not appear in the installed app.
 
-## Backups
+## Projects and folders
 
-Projects → **Back up** creates one `.json` file containing the project, its rooms, sensors and plan images.
-The share sheet opens, so you can choose Save to Files, AirDrop or Mail.
-**Restore a project from a backup file** brings it back. If the project already exists, it is restored as a copy.
+Tap the project name (top left) to open **Projects**. Projects are grouped in folders, e.g. a district folder holding its high school, junior high and elementary.
+- **New folder** creates an empty folder; pick it when creating or editing a project. New projects default to the last folder used.
+- **Edit** on a project changes its name, folder or site type. **Rename** / **Delete** on a folder header renames it for every project inside, or moves them to No folder.
+- Tap a folder name to collapse it. The search box filters by school or folder name.
 
-Back up anything you care about. iPadOS can clear website data if the device runs critically low on storage,
-and deleting the Home Screen icon deletes its data.
+## Backups and OneDrive
+
+Everything is stored on the iPad. Backup files are how projects get to OneDrive and to other computers.
+
+**One-time setup on the iPad:** install the OneDrive app and sign in with the company account, then in the Files app: Browse → ⋯ → Edit → turn on OneDrive.
+
+**Save to OneDrive:** Projects → **Back up** (one project), **Back up** on a folder header (that folder), or **Back up all**.
+The share sheet opens: choose **Save to Files** → OneDrive → your folder. Files are named `Folder - Project.json` with no date,
+so saving again to the same OneDrive folder replaces the earlier file (choose **Replace** if Files asks).
+
+**Pull from OneDrive:** Projects → **Choose backup files** → Browse → OneDrive, and pick one or more files.
+- A project that isn't on the iPad is **added**.
+- A file newer than the iPad copy **updates** it.
+- An identical file is skipped as **already up to date**.
+- A file *older* than the iPad copy asks first: keep the iPad version, replace it, or keep both.
+
+**On a computer:** open the same app address in Chrome or Edge, choose the backup files from the OneDrive folder, then export the **Client report (PDF)** or CSV.
+To send changes back to the iPad, back up on the computer to the same OneDrive folder and pull it on the iPad.
+
+Each backup holds the project, its rooms, sensors, notes and plan images. Back up anything you care about:
+iPadOS can clear website data if the device runs critically low on storage, and deleting the Home Screen icon deletes its data.
 
 ## Updating the app
 
@@ -86,7 +106,7 @@ Company name and logo are set once in Settings → Report branding, and are kept
 ```
 {
   "format": "sensor-layout-planner-backup", "version": 1,
-  "project": { id, schema: 3, name, siteType,         // 2: Gym + Cafeteria classes; 3: coverage as distance
+  "project": { id, schema: 3, name, siteType, folder,  // folder: "" = No folder         // 2: Gym + Cafeteria classes; 3: coverage as distance
                settings: { cigR, vapeR },                   // detection distance in feet (schema < 3: cigCov/vapeCov sq ft)
                classes: [ { id, name, mode: "vape"|"general"|"none", color } ] },
   "floors": [ { id, name, order, imgW, imgH,

@@ -95,7 +95,7 @@ button{cursor:pointer;touch-action:manipulation}
 .wallpick .wn{grid-column:2;grid-row:1}.wallpick .ws{grid-column:2;grid-row:3}.wallpick .ww{grid-column:1;grid-row:2}.wallpick .we{grid-column:3;grid-row:2}
 .wallpick .core{grid-column:2;grid-row:2;display:grid;place-items:center;text-align:center;border:1px solid var(--line);border-radius:4px;font-family:var(--f-num);font-size:12px;color:var(--ink2);line-height:1.35}
 .logo-prev{display:block;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:90px;max-width:100%;object-fit:contain}
-.field input[type=text],.field input[type=number],.field select,.sheet input[type=text],.sheet input[type=number],.sheet select{width:100%;min-width:0;border:1px solid var(--line);background:var(--raise);border-radius:8px;padding:9px 10px;font-size:16px}
+.field input[type=search],.sheet input[type=search],.frow input,.field input[type=text],.field input[type=number],.field select,.sheet input[type=text],.sheet input[type=number],.sheet select{width:100%;min-width:0;border:1px solid var(--line);background:var(--raise);border-radius:8px;padding:9px 10px;font-size:16px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--raise);border-radius:999px;padding:6px 11px;font-size:14px}
@@ -140,7 +140,25 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .sheet-card h2{margin:0;font-family:var(--f-label);font-weight:700;font-size:22px}
 .sheet-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .plist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.pitem{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--raise)}
+.pitem{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--raise)}
+.pitem .acts{display:flex;gap:6px;flex-wrap:wrap}
+.pitem.edit{display:block}
+.pitem.edit .grow{display:flex;flex-direction:column;gap:10px}
+.btn.sm{padding:7px 11px;font-size:14px}
+.plists{display:flex;flex-direction:column;gap:14px}
+.sheet input[type=search]{-webkit-appearance:none;appearance:none}
+.fgroup{display:flex;flex-direction:column;gap:6px}
+.fhead{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ftoggle{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:none;border:0;padding:6px 2px;font-weight:700;font-size:16.5px;text-align:left}
+.ftoggle .chev{color:var(--accent);display:inline-block;transition:transform .15s}
+.ftoggle[aria-expanded="true"] .chev{transform:rotate(90deg)}
+.ftoggle svg{width:20px;height:20px;color:var(--accent);flex:none}
+.ftoggle .fname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ftoggle .cnt{font-family:var(--f-num);font-size:12.5px;color:var(--ink2);font-weight:400}
+.frow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.frow input{flex:1 1 180px}
+.split{display:flex;justify-content:space-between;align-items:center;gap:10px}
+@media (prefers-reduced-motion: reduce){ .ftoggle .chev{transition:none} }
 .pitem:last-child{border-bottom:0}
 .pitem .grow{flex:1;min-width:0}
 .pitem .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -333,7 +351,7 @@ const S = {
   store: null, projects: [], P: null, floors: [], fid: null, demo: false,
   tool: 'select', sel: null, view: {x: 0, y: 0, k: 1}, fitK: 1,
   imgs: new Map(), ana: new Map(), hist: new Map(),
-  showCells: LS.get('cells', true), lastCls: null, brand: {company: 'Legacy Sensors', logo: null}, pendingFile: null,
+  showCells: LS.get('cells', true), lastCls: null, brand: {company: 'Legacy Sensors', logo: null}, pendingFiles: null,
   detect: LS.get('detect', {thr: 150, gap: 6}),
   pendingScale: null, dirtyFloors: new Set(), dirtyProject: false, saveT: 0,
   armed: null,
@@ -797,7 +815,7 @@ function iou(a, b) { const x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y), x2 
 /* ---------- header ---------- */
 function renderHeader() {
   const p = S.P; if (!p) return;
-  $('#projName').textContent = p.name; $('#projKind').textContent = p.siteType || 'Project';
+  $('#projName').textContent = p.name; $('#projKind').textContent = (p.folder ? p.folder + ' · ' : '') + (p.siteType || 'Project');
   $('#banner').hidden = !S.demo;
   $('#total').textContent = fmtInt(projectTotal());
   const nav = $('#floors');
@@ -1078,24 +1096,83 @@ function closeSheet() { sheet.hidden = true; card.innerHTML = ''; S.sheetState =
 sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
 const closeBtn = '<button class="ibtn" data-act="close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
 
+/* Folders: each project carries a folder name; the folder list also keeps empty folders. */
+const byName = (a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'});
+const sameF = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+const FOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 6.5A1.5 1.5 0 014.5 5h4.2l2 2.2h8.8A1.5 1.5 0 0121 8.7v9.8a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5z"/></svg>';
+async function loadFolders() { try { const f = await S.store.getMeta('folders'); S.folders = Array.isArray(f) ? f : []; } catch { S.folders = []; } }
+async function saveFolders() { try { await S.store.setMeta('folders', S.folders); } catch {} }
+function folderNames() {
+  const m = new Map();
+  for (const f of [...(S.folders || []), ...S.projects.map(p => p.folder || '')]) { const k = (f || '').trim(); if (k && !m.has(k.toLowerCase())) m.set(k.toLowerCase(), k); }
+  return [...m.values()].sort(byName);
+}
+const folderOptions = sel => `<option value="">No folder</option>${folderNames().map(f => `<option value="${esc(f)}" ${sameF(f, sel) && sel ? 'selected' : ''}>${esc(f)}</option>`).join('')}<option value="__new">New folder…</option>`;
+const siteOptions = sel => ['School', 'Hotel', 'Other'].map(t => `<option ${t === sel ? 'selected' : ''}>${t}</option>`).join('');
+function pickedFolder(selId, newId) {
+  const v = $('#' + selId).value; if (v !== '__new') return v;
+  const n = $('#' + newId).value.trim(); return n || null;
+}
+async function rememberFolder(f) { if (f && !(S.folders || []).some(x => sameF(x, f))) { S.folders = [...(S.folders || []), f]; await saveFolders(); } }
+// Name, folder and site type can change from the list; the open project is updated in place so nothing is overwritten.
+async function updateProjectMeta(id, fields) {
+  if (!S.demo && S.P && S.P.id === id) { Object.assign(S.P, fields); changed({projectOnly: true}); clearTimeout(S.saveT); await flushSave(); }
+  else { const p = await S.store.getProject(id); if (!p) return; Object.assign(p, fields, {updatedAt: Date.now()}); await S.store.saveProject(p); }
+}
 async function openProjects() {
-  if (S.store) await refreshProjects();
+  if (S.store) { await refreshProjects(); await loadFolders(); }
   const kind = S.store ? S.store.kind : 'memory';
   let where = kind === 'local' ? 'Projects and plan images are stored on this iPad only. Nothing is uploaded.' : 'Storage isn’t available here, so projects last until you close the app.';
   try { if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); where += ` Using ${(e.usage / 1048576).toFixed(1)} MB.`; } } catch {}
   if (kind === 'local') where += S.persisted ? ' Storage is marked persistent.' : ' Back up projects you care about; iPadOS can clear app data if the device runs out of space.';
   const standalone = navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
   const install = standalone ? '' : '<div class="warnbox">To install: tap Share, then Add to Home Screen, and open the planner from that icon from now on. The Home Screen copy works offline and keeps its own projects, separate from Safari.</div>';
-  const items = S.projects.map(p => `<div class="pitem" aria-current="${!S.demo && S.P && p.id === S.P.id}"><div class="grow"><div class="nm">${esc(p.name)}</div><div class="note">${esc(p.siteType || '')}${p.updatedAt ? ' · edited ' + new Date(p.updatedAt).toLocaleDateString() : ''}</div></div>
-    <button class="btn" data-act="openP" data-id="${esc(p.id)}">Open</button><button class="btn" data-act="backupP" data-id="${esc(p.id)}">Back up</button><button class="btn danger" data-act="delP" data-id="${esc(p.id)}">Delete</button></div>`).join('');
   openSheet(`<div class="sheet-head"><h2>Projects</h2>${closeBtn}</div>${install}
     <div class="sec"><span class="k">New project</span>
-      <div class="field"><label class="k" for="npName">Building name</label><input type="text" id="npName" placeholder="e.g. Fairborn High School" autocomplete="off"></div>
-      <div class="field"><label class="k" for="npType">Site type</label><select id="npType"><option>School</option><option>Hotel</option><option>Other</option></select></div>
+      <div class="field"><label class="k" for="npName">Building name</label><input type="text" id="npName" placeholder="e.g. Lebanon High School" autocomplete="off"></div>
+      <div class="row2"><div class="field"><label class="k" for="npFolder">Folder</label><select id="npFolder" data-new="npNewWrap">${folderOptions(LS.get('lastFolder', ''))}</select></div>
+        <div class="field"><label class="k" for="npType">Site type</label><select id="npType">${siteOptions('School')}</select></div></div>
+      <div class="field" id="npNewWrap" hidden><label class="k" for="npNew">New folder name</label><input type="text" id="npNew" placeholder="e.g. Lebanon" autocomplete="off"></div>
       <button class="btn primary" data-act="createP">Create and add first floor</button></div>
-    <div class="sec"><span class="k">Saved projects</span>${items ? `<div class="plist">${items}</div>` : '<p class="note">None yet.</p>'}</div>
-    <div class="sec"><span class="k">Restore</span><label class="btn" for="restoreFile" style="display:block">Restore a project from a backup file</label><input type="file" id="restoreFile" accept=".json,application/json" hidden></div>
+    <div class="sec"><div class="split"><span class="k">Saved projects</span><div class="acts"><button class="btn sm" data-act="backupAll">Back up all</button><button class="btn sm" data-act="newFolder">New folder</button></div></div>
+      <input type="search" id="pFilter" placeholder="Find a school or folder" aria-label="Find a project" autocomplete="off">
+      <div id="plistWrap"></div></div>
+    <div class="sec"><span class="k">Restore or update</span><label class="btn" for="restoreFile" style="display:block">Choose backup files</label><input type="file" id="restoreFile" accept=".json,application/json" multiple hidden>
+      <p class="note">Pick one or more backups, e.g. from OneDrive under Browse. New projects are added, newer files update the iPad copy, and files older than the iPad copy ask first.</p>
+      <p class="note"><b>Keeping projects in OneDrive:</b> Back up → Save to Files → OneDrive → your folder. Saving again to the same folder replaces the earlier file.</p></div>
     <div class="sec"><button class="btn" data-act="demo">Open the example school wing</button><p class="note">${where}</p></div>`);
+  S.sheetState = {kind: 'projects', filter: '', editing: null, renaming: null, adding: false};
+  renderProjectList();
+}
+function renderProjectList() {
+  const st = S.sheetState, wrap = $('#plistWrap'); if (!wrap || !st || st.kind !== 'projects') return;
+  const q = st.filter.trim().toLowerCase(), collapsed = new Set(LS.get('collapsed', []));
+  const groups = [...folderNames().map(f => ({f, items: S.projects.filter(p => sameF(p.folder, f) && (p.folder || '').trim())})), {f: '', items: S.projects.filter(p => !(p.folder || '').trim())}];
+  let html = st.adding ? `<div class="frow"><input type="text" id="nfName" placeholder="Folder name, e.g. Lebanon" aria-label="New folder name" autocomplete="off"><button class="btn sm primary" data-act="addFolder">Add</button><button class="btn sm" data-act="cancelFolder">Cancel</button></div>` : '';
+  for (const g of groups) {
+    let items = g.items.slice().sort((a, b) => byName(a.name, b.name));
+    if (q) items = items.filter(p => p.name.toLowerCase().includes(q) || g.f.toLowerCase().includes(q));
+    if ((q || !g.f) && !items.length) continue;
+    const key = g.f || '\u0000', open = !!q || !collapsed.has(key), armed = st.armedFolder === g.f;
+    const head = st.renaming === g.f && g.f
+      ? `<div class="frow"><input type="text" id="rfName" value="${esc(g.f)}" aria-label="Folder name" autocomplete="off"><button class="btn sm primary" data-act="saveFolderName" data-f="${esc(g.f)}">Save</button><button class="btn sm" data-act="cancelRename">Cancel</button></div>`
+      : `<div class="fhead"><button class="ftoggle" data-act="toggleFolder" data-f="${esc(g.f)}" aria-expanded="${open}"><span class="chev" aria-hidden="true">▸</span>${FOLDER_ICON}<span class="fname">${g.f ? esc(g.f) : 'No folder'}</span><span class="cnt">${g.items.length}</span></button>
+          ${g.f ? `${g.items.length ? `<button class="btn sm" data-act="backupFolder" data-f="${esc(g.f)}">Back up</button>` : ''}<button class="btn sm" data-act="renameFolder" data-f="${esc(g.f)}">Rename</button><button class="btn sm danger ${armed ? 'armed' : ''}" data-act="delFolder" data-f="${esc(g.f)}">${armed ? (g.items.length ? `Move ${g.items.length} to No folder?` : 'Tap to confirm') : 'Delete'}</button>` : ''}</div>`;
+    const rows = !open ? '' : items.length ? `<div class="plist">${items.map(p => projectRow(p)).join('')}</div>` : '<p class="note">Empty. Pick this folder when you create or edit a project.</p>';
+    html += `<div class="fgroup">${head}${rows}</div>`;
+  }
+  wrap.innerHTML = `<div class="plists">${html || `<p class="note">${q ? 'Nothing matches.' : 'No projects yet.'}</p>`}</div>`;
+}
+function projectRow(p) {
+  const st = S.sheetState, cur = !S.demo && S.P && p.id === S.P.id;
+  if (st.editing === p.id) return `<div class="pitem edit" aria-current="${cur}"><div class="grow">
+      <div class="field"><label class="k" for="epName">Name</label><input type="text" id="epName" value="${esc(p.name)}" autocomplete="off"></div>
+      <div class="row2"><div class="field"><label class="k" for="epFolder">Folder</label><select id="epFolder" data-new="epNewWrap">${folderOptions(p.folder || '')}</select></div>
+        <div class="field"><label class="k" for="epType">Site type</label><select id="epType">${siteOptions(p.siteType)}</select></div></div>
+      <div class="field" id="epNewWrap" hidden><label class="k" for="epNew">New folder name</label><input type="text" id="epNew" autocomplete="off"></div>
+      <div class="btns"><button class="btn sm" data-act="cancelEdit">Cancel</button><button class="btn sm primary" data-act="saveEdit" data-id="${esc(p.id)}">Save</button></div></div></div>`;
+  return `<div class="pitem" aria-current="${cur}"><div class="grow"><div class="nm">${esc(p.name)}</div><div class="note">${esc(p.siteType || '')}${p.updatedAt ? ' · edited ' + new Date(p.updatedAt).toLocaleDateString() : ''}${cur ? ' · open now' : ''}</div></div>
+    <div class="acts"><button class="btn sm" data-act="openP" data-id="${esc(p.id)}">Open</button><button class="btn sm" data-act="editP" data-id="${esc(p.id)}">Edit</button><button class="btn sm" data-act="backupP" data-id="${esc(p.id)}">Back up</button><button class="btn sm danger" data-act="delP" data-id="${esc(p.id)}">Delete</button></div></div>`;
 }
 async function openAddFloor() {
   const n = S.floors.length + 1;
@@ -1148,27 +1225,72 @@ function covNote() {
   const line = (name, R) => R > 0 ? `${name}: circle ${fmtInt(Math.PI * R * R)} sq ft · spacing ${(R * Math.SQRT2).toFixed(1)} ft · counted ${fmtInt(2 * R * R)} sq ft per ceiling sensor` : `${name}: enter a distance`;
   el.innerHTML = line('Cig / THC', +$('#stCig').value) + '<br>' + line('Vape', +$('#stVape').value);
 }
-card.addEventListener('input', e => { if (e.target.id === 'stCig' || e.target.id === 'stVape') covNote(); });
+card.addEventListener('input', e => {
+  if (e.target.id === 'stCig' || e.target.id === 'stVape') covNote();
+  if (e.target.id === 'pFilter' && S.sheetState) { S.sheetState.filter = e.target.value; renderProjectList(); }
+});
+card.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return; const id = e.target.id, act = {nfName: 'addFolder', rfName: 'saveFolderName'}[id];
+  if (act) { e.preventDefault(); const btn = card.querySelector(`[data-act="${act}"]`); if (btn) btn.click(); }
+});
 card.addEventListener('click', async e => {
   const b = e.target.closest('[data-act]'); if (!b) return; const act = b.dataset.act;
   if (act === 'close') return closeSheet();
-  if (act === 'shareFile') { const f = S.pendingFile; if (!f) return closeSheet();
-    try { await navigator.share({files: [f], title: f.name}); closeSheet(); } catch (err) { if (!err || err.name !== 'AbortError') { downloadBlob(f, f.name); closeSheet(); } } return; }
+  if (act === 'shareFile') { const fs = S.pendingFiles || []; if (!fs.length) return closeSheet();
+    try { await navigator.share(fs.length === 1 ? {files: fs, title: fs[0].name} : {files: fs}); closeSheet(); } catch (err) { if (!err || err.name !== 'AbortError') { for (const f of fs) downloadBlob(f, f.name); closeSheet(); } } return; }
+  if (act === 'applyRestore' && S.sheetState && S.sheetState.kind === 'restore') {
+    const choice = {}; card.querySelectorAll('select[data-ri]').forEach(sel => { choice[+sel.dataset.ri] = sel.value; });
+    b.disabled = true; return applyRestore(S.sheetState.entries, choice);
+  }
   if (act === 'clearLogo') { S.sheetState.logo = null; const pv = $('#stLogoPrev'); pv.hidden = true; pv.removeAttribute('src'); return; }
   if (act === 'demo') { closeSheet(); return openDemo(); }
   if (act === 'createP') {
     const name = $('#npName').value.trim(); if (!name) return toast('Give the building a name.');
-    const p = newProject(name, $('#npType').value);
+    const folder = pickedFolder('npFolder', 'npNew'); if (folder === null) return toast('Name the new folder, or pick an existing one.');
+    const p = newProject(name, $('#npType').value); p.folder = folder; LS.set('lastFolder', folder); await rememberFolder(folder);
     try { await S.store.saveProject(p); } catch { return toast('Couldn’t create the project. Check your connection and try again.'); }
     closeSheet(); await openProject(p.id); return openAddFloor();
   }
   if (act === 'openP') { closeSheet(); return openProject(b.dataset.id); }
-  if (act === 'backupP') { b.disabled = true; try { await backupProject(b.dataset.id); } finally { b.disabled = false; } return; }
+  const PS = S.sheetState && S.sheetState.kind === 'projects' ? S.sheetState : null;
+  if (PS) {
+    if (act === 'toggleFolder') { const key = b.dataset.f || '\u0000', c = new Set(LS.get('collapsed', [])); c.has(key) ? c.delete(key) : c.add(key); LS.set('collapsed', [...c]); return renderProjectList(); }
+    if (act === 'backupAll') { b.disabled = true; try { await backupProjects(S.projects.map(p => p.id)); } finally { b.disabled = false; } return; }
+    if (act === 'backupFolder') { b.disabled = true; try { await backupProjects(S.projects.filter(p => sameF(p.folder, b.dataset.f)).sort((x, y) => byName(x.name, y.name)).map(p => p.id)); } finally { b.disabled = false; } return; }
+    if (act === 'newFolder') { PS.adding = true; renderProjectList(); const i = $('#nfName'); if (i) i.focus(); return; }
+    if (act === 'cancelFolder') { PS.adding = false; return renderProjectList(); }
+    if (act === 'addFolder') { const n = $('#nfName').value.trim(); if (!n) return toast('Type a folder name.'); if (folderNames().some(f => sameF(f, n))) return toast(`There’s already a folder called ${n}.`); await rememberFolder(n); PS.adding = false; return renderProjectList(); }
+    if (act === 'renameFolder') { PS.renaming = b.dataset.f; PS.armedFolder = null; renderProjectList(); const i = $('#rfName'); if (i) { i.focus(); i.select(); } return; }
+    if (act === 'cancelRename') { PS.renaming = null; return renderProjectList(); }
+    if (act === 'saveFolderName') {
+      const old = b.dataset.f, nw = $('#rfName').value.trim(); if (!nw) return toast('Type a folder name.');
+      b.disabled = true;
+      for (const p of S.projects.filter(p => sameF(p.folder, old))) await updateProjectMeta(p.id, {folder: nw});
+      S.folders = (S.folders || []).filter(f => !sameF(f, old)); await rememberFolder(nw); await saveFolders();
+      if (sameF(LS.get('lastFolder', ''), old)) LS.set('lastFolder', nw);
+      await refreshProjects(); PS.renaming = null; renderHeader(); return renderProjectList();
+    }
+    if (act === 'delFolder') {
+      const f = b.dataset.f; if (PS.armedFolder !== f) { PS.armedFolder = f; return renderProjectList(); }
+      for (const p of S.projects.filter(p => sameF(p.folder, f))) await updateProjectMeta(p.id, {folder: ''});
+      S.folders = (S.folders || []).filter(x => !sameF(x, f)); await saveFolders(); if (sameF(LS.get('lastFolder', ''), f)) LS.set('lastFolder', '');
+      await refreshProjects(); PS.armedFolder = null; renderHeader(); return renderProjectList();
+    }
+    if (act === 'editP') { PS.editing = b.dataset.id; renderProjectList(); const i = $('#epName'); if (i && window.matchMedia('(pointer:fine)').matches) i.focus(); return; }
+    if (act === 'cancelEdit') { PS.editing = null; return renderProjectList(); }
+    if (act === 'saveEdit') {
+      const name = $('#epName').value.trim(); if (!name) return toast('The project needs a name.');
+      const folder = pickedFolder('epFolder', 'epNew'); if (folder === null) return toast('Name the new folder, or pick an existing one.');
+      b.disabled = true; await rememberFolder(folder); await updateProjectMeta(b.dataset.id, {name, folder, siteType: $('#epType').value});
+      await refreshProjects(); PS.editing = null; renderHeader(); toast('Saved.'); return renderProjectList();
+    }
+  }
+  if (act === 'backupP') { b.disabled = true; try { await backupProjects([b.dataset.id]); } finally { b.disabled = false; } return; }
   if (act === 'delP') {
     if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap to confirm'; b.classList.add('armed'); return; }
     b.disabled = true; try { await S.store.deleteProject(b.dataset.id); } catch { toast('Couldn’t delete that project.'); }
     if (!S.demo && S.P && S.P.id === b.dataset.id) { await refreshProjects(); if (S.projects[0]) await openProject(S.projects[0].id); else openDemo(); }
-    return openProjects();
+    await refreshProjects(); return renderProjectList();
   }
   if (act === 'saveFloor') return saveNewFloor();
   if (act === 'renameF') { const v = $('#frName').value.trim(); const F = curFloor(); if (v && F) { F.name = v; changed(); } return closeSheet(); }
@@ -1200,7 +1322,8 @@ function syncClassInputs() { card.querySelectorAll('[data-cf]').forEach(i => { c
 function rerenderClasses() { card.querySelectorAll('.cls-row').forEach(r => r.remove()); card.querySelector('[data-act="addCls"]').insertAdjacentHTML('beforebegin', classRows(S.sheetState.classes)); }
 card.addEventListener('change', async e => {
   if (e.target.id === 'flFile') { const f = e.target.files[0]; if (f) await loadPlanFile(f, 1); }
-  if (e.target.id === 'restoreFile') { const f = e.target.files[0]; if (f) await restoreBackup(f); }
+  if (e.target.dataset && e.target.dataset.new) { const w = $('#' + e.target.dataset.new); if (w) { w.hidden = e.target.value !== '__new'; if (!w.hidden) { const i = w.querySelector('input'); if (i) i.focus(); } } }
+  if (e.target.id === 'restoreFile') { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) await restoreFiles(fs); }
   if (e.target.id === 'stLogoFile') { const f = e.target.files[0]; if (!f) return;
     try { const b = await normalizeLogo(f); S.sheetState.logo = b; const pv = $('#stLogoPrev'); pv.src = URL.createObjectURL(b); pv.hidden = false; }
     catch { toast('That image couldn’t be read. Try a PNG or JPG.'); } }
@@ -1260,18 +1383,25 @@ $('#startBtn').addEventListener('click', openProjects);
 const MIME = {csv: 'text/csv', png: 'image/png', json: 'application/json', pdf: 'application/pdf'};
 async function saveFile(name, data) {
   const type = MIME[name.split('.').pop()] || 'application/octet-stream';
-  const blob = data instanceof Blob ? data : new Blob([data], {type}), file = new File([blob], name, {type});
-  if (navigator.canShare && navigator.canShare({files: [file]})) {
-    try { await navigator.share({files: [file], title: name}); return; }
-    catch (e) { if (e && e.name === 'AbortError') return; if (e && e.name === 'NotAllowedError') return offerFile(file); }
+  const blob = data instanceof Blob ? data : new Blob([data], {type});
+  return saveFiles([new File([blob], name, {type})]);
+}
+async function saveFiles(files) {
+  if (!files.length) return;
+  if (navigator.canShare && navigator.canShare({files})) {
+    try { await navigator.share(files.length === 1 ? {files, title: files[0].name} : {files}); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; if (e && e.name === 'NotAllowedError') return offerFiles(files); }
   }
-  downloadBlob(blob, name);
+  for (const f of files) downloadBlob(f, f.name);
 }
 function downloadBlob(blob, name) { const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 8000); }
 // iPadOS only opens the share sheet straight after a tap; long jobs (reports, backups) finish too late, so ask for one more tap.
-function offerFile(file) {
-  S.pendingFile = file;
-  openSheet(`<div class="sheet-head"><h2>File ready</h2>${closeBtn}</div><p>${esc(file.name)} · ${(file.size / 1048576).toFixed(1)} MB</p>
+function offerFiles(files) {
+  S.pendingFiles = files;
+  const mb = files.reduce((n, f) => n + f.size, 0) / 1048576, json = files.every(f => /\.json$/i.test(f.name));
+  openSheet(`<div class="sheet-head"><h2>${files.length > 1 ? files.length + ' files ready' : 'File ready'}</h2>${closeBtn}</div>
+    <p>${files.length > 3 ? esc(files.slice(0, 3).map(f => f.name).join(', ')) + ` and ${files.length - 3} more` : esc(files.map(f => f.name).join(', '))} · ${mb.toFixed(1)} MB</p>
+    ${json ? '<p class="note">Choose Save to Files, then your OneDrive folder. If Files says the file already exists, choose Replace to update it.</p>' : ''}
     <div class="btns"><button class="btn primary" data-act="shareFile">Save or share</button></div>`);
 }
 const slug = s => String(s).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
@@ -1617,9 +1747,13 @@ async function normalizeLogo(file) {
 const BACKUP_FORMAT = 'sensor-layout-planner-backup';
 const blobToB64 = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
 function b64ToBlob(b64, type) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], {type}); }
-async function backupProject(pid) {
-  if (!S.demo && S.P && S.P.id === pid) { clearTimeout(S.saveT); await flushSave(); }
-  const p = await S.store.getProject(pid); if (!p) return toast('Couldn’t find that project.');
+// Backups are named after folder + project and carry no date, so saving again to the same OneDrive folder replaces the old file.
+const cleanName = t => String(t || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '').replace(/\s+/g, ' ').trim();
+const backupName = p => `${cleanName(p.folder) ? cleanName(p.folder) + ' - ' : ''}${cleanName(p.name) || 'Project'}.json`;
+const fileTime = o => o.project.updatedAt || Date.parse(o.exportedAt) || 0;
+async function flushIfOpen(ids) { if (!S.demo && S.P && (!ids || ids.includes(S.P.id))) { clearTimeout(S.saveT); await flushSave(); } }
+async function buildBackup(pid) {
+  const p = await S.store.getProject(pid); if (!p) return null;
   const floors = (await S.store.listFloors(pid)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const out = {format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(), units: 'feet; room x/y/w/h in plan-image pixels', project: p, floors: []};
   for (const f of floors) {
@@ -1627,24 +1761,89 @@ async function backupProject(pid) {
     const {imageRef, ...rest} = f;
     out.floors.push({...rest, image: blob ? {type: blob.type || 'image/jpeg', base64: await blobToB64(blob)} : null});
   }
-  const d = new Date(), stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  await saveFile(`${slug(p.name)}-backup-${stamp}.json`, JSON.stringify(out));
+  return out;
 }
-async function restoreBackup(file) {
-  let o; try { o = JSON.parse(await file.text()); } catch { return toast('That file isn’t a project backup.'); }
-  if (!o || o.format !== BACKUP_FORMAT || !o.project) return toast('That file isn’t a project backup from this app.');
-  const clash = await S.store.getProject(o.project.id);
-  const p = {...o.project}; if (clash) { p.id = uid(); p.name = p.name + ' (restored)'; }
-  p.updatedAt = Date.now();
+async function backupProjects(ids) {
+  if (!ids.length) return toast('No projects to back up.');
+  if (ids.length > 1) toast(`Preparing ${ids.length} backups…`);
   try {
-    for (const f of o.floors || []) {
-      const {image, ...rest} = f;
-      const ref = image && image.base64 ? await S.store.putImage(b64ToBlob(image.base64, image.type || 'image/jpeg')) : null;
-      await S.store.saveFloor(p.id, {...rest, id: clash ? uid() : rest.id, imageRef: ref, rooms: rest.rooms || [], sensors: rest.sensors || []});
+    await flushIfOpen(ids);
+    const files = [], used = new Set();
+    for (const id of ids) {
+      const o = await buildBackup(id); if (!o) continue;
+      let name = backupName(o.project), k = 2; while (used.has(name.toLowerCase())) name = backupName(o.project).replace(/\.json$/, ` (${k++}).json`);
+      used.add(name.toLowerCase()); files.push(new File([JSON.stringify(o)], name, {type: 'application/json'}));
     }
-    await S.store.saveProject(p);
-  } catch { return toast('Restore failed partway. The iPad may be low on space.'); }
-  closeSheet(); await openProject(p.id); toast(`Restored ${p.name}.`);
+    await saveFiles(files);
+  } catch (e) { console.error(e); toast('Couldn’t build the backup.'); }
+}
+async function readBackupFile(file) { try { const o = JSON.parse(await file.text()); if (o && o.format === BACKUP_FORMAT && o.project && o.project.id) return o; } catch {} return null; }
+// Restoring compares each file with the iPad's copy: new projects are added, newer files update the iPad copy,
+// identical ones are skipped, and files older than the iPad copy wait for a decision.
+async function restoreFiles(list) {
+  const files = [...list]; if (!files.length) return;
+  await flushIfOpen();
+  const entries = [];
+  for (const file of files) {
+    const o = await readBackupFile(file);
+    if (!o) { entries.push({bad: true, name: file.name}); continue; }
+    const local = await S.store.getProject(o.project.id), ft = fileTime(o), lt = local ? (local.updatedAt || 0) : 0;
+    const status = !local ? 'new' : ft > lt + 1000 ? 'newer' : Math.abs(ft - lt) <= 1000 ? 'same' : 'older';
+    entries.push({o, status, name: o.project.name, folder: o.project.folder || '', ft, lt});
+  }
+  const best = new Map();   // the same project picked twice: keep the newest file
+  entries.forEach((e, i) => { if (!e.o) return; const k = e.o.project.id, prev = best.get(k); if (prev == null || e.ft > entries[prev].ft) best.set(k, i); });
+  entries.forEach((e, i) => { if (e.o && best.get(e.o.project.id) !== i) e.dup = true; });
+  if (entries.some(e => e.status === 'older' && !e.dup)) return restoreReview(entries);
+  return applyRestore(entries, {});
+}
+function restoreReview(entries) {
+  const when = t => t ? new Date(t).toLocaleString([], {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) : 'unknown';
+  const rows = entries.map((e, i) => {
+    if (e.bad) return `<div class="pitem"><div class="grow"><div class="nm">${esc(e.name)}</div><div class="note">Not a backup from this app. Skipped.</div></div></div>`;
+    const label = `${e.folder ? esc(e.folder) + ' · ' : ''}${esc(e.name)}`;
+    const msg = e.dup ? 'Picked twice; the newer file is used.' : {new: 'New. It will be added.', newer: 'This file is newer. It will update the iPad copy.', same: 'Already up to date.',
+      older: `The iPad copy was changed after this backup (iPad ${when(e.lt)}, file ${when(e.ft)}).`}[e.status];
+    const pick = e.status === 'older' && !e.dup ? `<select data-ri="${i}" aria-label="What to do with ${label}"><option value="skip">Keep the iPad version</option><option value="replace">Replace with this file</option><option value="copy">Keep both</option></select>` : '';
+    return `<div class="pitem"><div class="grow"><div class="nm">${label}</div><div class="note">${msg}</div></div>${pick}</div>`;
+  }).join('');
+  openSheet(`<div class="sheet-head"><h2>Restore backups</h2>${closeBtn}</div>
+    <p>Some files are older than what’s on this iPad. Choose what to do with each.</p>
+    <div class="plist">${rows}</div>
+    <div class="btns"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="applyRestore">Restore</button></div>`);
+  S.sheetState = {kind: 'restore', entries};
+}
+async function writeBackup(o, mode) {
+  const p = clone(o.project), copy = mode === 'copy';
+  if (copy) { p.id = uid(); p.name = p.name + ' (copy)'; p.updatedAt = Date.now(); } else p.updatedAt = fileTime(o);
+  if (mode === 'replace') await S.store.deleteProject(p.id);
+  for (const f of o.floors || []) {
+    const {image, ...rest} = f;
+    const ref = image && image.base64 ? await S.store.putImage(b64ToBlob(image.base64, image.type || 'image/jpeg')) : null;
+    await S.store.saveFloor(p.id, {...rest, id: copy ? uid() : rest.id, imageRef: ref, rooms: rest.rooms || [], sensors: rest.sensors || []});
+  }
+  await S.store.saveProject(p);
+  if (p.folder) await rememberFolder(p.folder);
+  return p.id;
+}
+async function applyRestore(entries, choice) {
+  const n = {added: 0, updated: 0, copied: 0, same: 0, skipped: 0, bad: 0}; let reopen = null, single = null, failed = false;
+  const valid = entries.filter(e => e.o && !e.dup);
+  for (const [i, e] of entries.entries()) {
+    if (!e.o) { n.bad++; continue; } if (e.dup) { n.skipped++; continue; }
+    const mode = e.status === 'new' ? 'add' : e.status === 'newer' ? 'replace' : e.status === 'same' ? 'same' : (choice[i] || 'skip');
+    if (mode === 'same') { n.same++; single = e.o.project.id; continue; }
+    if (mode === 'skip') { n.skipped++; single = e.o.project.id; continue; }
+    const isOpen = !S.demo && S.P && S.P.id === e.o.project.id && mode === 'replace';
+    if (isOpen) { clearTimeout(S.saveT); S.dirtyFloors.clear(); S.dirtyProject = false; }
+    try { const id = await writeBackup(e.o, mode); single = id; if (isOpen) reopen = id; n[mode === 'add' ? 'added' : mode === 'replace' ? 'updated' : 'copied']++; }
+    catch (err) { console.error(err); failed = true; break; }
+  }
+  const parts = [n.added && `added ${n.added}`, n.updated && `updated ${n.updated}`, n.copied && `copied ${n.copied}`, n.same && `${n.same} already up to date`, n.skipped && `skipped ${n.skipped}`, n.bad && `${n.bad} not a backup`].filter(Boolean);
+  const msg = failed ? 'Restore stopped partway. The iPad may be low on space.' : parts.length ? parts.join(', ').replace(/^./, c => c.toUpperCase()) + '.' : 'Nothing to restore.';
+  if (valid.length === 1 && single) { closeSheet(); await openProject(single); }
+  else { if (reopen) await openProject(reopen); await openProjects(); }
+  toast(msg);
 }
 
 /* ---------- toast ---------- */
